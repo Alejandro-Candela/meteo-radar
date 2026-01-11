@@ -282,7 +282,7 @@ def main():
             "Media (2.2 km/px)": 0.02,
             "Baja (5.5 km/px)": 0.05
         }
-        selected_res_name = st.selectbox("Calidad de Imagen", list(resolution_options.keys()), index=0)
+        selected_res_name = st.selectbox("Resolución del radar", list(resolution_options.keys()), index=2)
         selected_resolution = resolution_options[selected_res_name]
         
         # --- Legend in Sidebar ---
