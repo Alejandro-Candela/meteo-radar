@@ -7,6 +7,7 @@ import shutil
 import xarray as xr
 import rioxarray
 import numpy as np
+import time
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import sys
@@ -41,7 +42,7 @@ def get_facade():
 @st.cache_resource(ttl=3600, show_spinner=False)
 def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     """
-    Fetches both History (Past 15 days) and Forecast (Next 15 days).
+    Fetches both History (Past 3 days) and Forecast (Next 3 days).
     Returns two separate datasets.
     Uses cache_resource to avoid pickling large Xarray datasets.
     """
@@ -53,13 +54,13 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     
-    # 1. History Block (Last 15 days)
-    history_start = now - timedelta(days=15)
+    # 1. History Block (Last 3 days)
+    history_start = now - timedelta(days=3)
     history_window = TimeRange(start=history_start, end=now)
     ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
-    # 2. Forecast Block (Next 15 days)
-    forecast_end = now + timedelta(days=15)
+    # 2. Forecast Block (Next 3 days)
+    forecast_end = now + timedelta(days=3)
     forecast_window = TimeRange(start=now, end=forecast_end)
     ds_forecast = facade.get_forecast_view(bbox, forecast_window, resolution=resolution)
     
@@ -378,6 +379,12 @@ def main():
         show_temp = st.checkbox("🌡️ Temperatura", value=False)
         show_pressure = st.checkbox("⏲️ Presión", value=False)
         show_wind = st.checkbox("💨 Viento", value=False)
+
+        st.divider()
+        st.subheader("▶️ Animación")
+        # Use key to persist state across reruns for animation logic
+        auto_play = st.checkbox("Reproducción Automática", key="auto_play")
+        play_speed = st.slider("Velocidad (seg/frame)", 0.2, 2.0, 1.0)
         
         st.divider()
         if st.button("📁 Exportar Datos..."):
@@ -406,6 +413,31 @@ def main():
     # Use session state to track which slider is "Active"
     if 'active_mode' not in st.session_state:
         st.session_state['active_mode'] = 'forecast' # Default to forecast
+
+    # --- Animation Logic (Update State BEFORE Widgets) ---
+    # Must run before sliders are instantiated
+    if st.session_state.get("auto_play"):
+         mode = st.session_state.get('active_mode', 'forecast')
+         if mode == 'history':
+             times = hist_times
+             key = 'slider_history'
+             default_val = max_hist
+         else:
+             times = fore_times
+             key = 'slider_forecast'
+             default_val = min_fore
+         
+         # Get current value from state or default
+         curr = st.session_state.get(key, default_val)
+         curr = pd.to_datetime(curr).to_pydatetime()
+         
+         # Find and increment
+         matches = np.where(times == np.datetime64(curr))
+         if len(matches[0]) > 0:
+             idx = matches[0][0]
+             next_idx = (idx + 1) % len(times)
+             next_val = times[next_idx].to_pydatetime()
+             st.session_state[key] = next_val  # Safe to update here before slider render
 
     # Dual Column Layout above Map
     # Use columns to put them side-by-side
@@ -602,6 +634,11 @@ def main():
         except Exception:
             pass
     
+    # --- Animation Trigger (At end of script to control Loop) ---
+    if st.session_state.get("auto_play"):
+        time.sleep(play_speed)
+        st.rerun()
+    
     # Display Map - Static Key to prevent full reload
     # We use a static key 'main_map'. Streamlit might cache the iframe.
     # If the iframe is cached, it might NOT update the content inside.
@@ -609,7 +646,9 @@ def main():
     # If we call it again, strict re-render is needed for the new HTML to show.
     # If we use a static key, Streamlit replaces the component if the args (html) changed?
     # Actually, the 'key' in st.components.v1.html is for state preservation.
-    m.to_streamlit(height=600) 
+    # Use dynamic key to force full re-render on time change (avoids stale iframe)
+    st.caption(f"Debug: Rendering {active_time}")
+    m.to_streamlit(height=600, key=f"map_{active_time.isoformat()}") 
     
     # Cleanup
     # shutil.rmtree(tmp_dir) 
