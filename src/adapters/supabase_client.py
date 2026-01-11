@@ -40,7 +40,7 @@ class SupabaseClient:
         s = f"{bbox_tuple[0]:.2f}_{bbox_tuple[1]:.2f}_{bbox_tuple[2]:.2f}_{bbox_tuple[3]:.2f}"
         return hashlib.md5(s.encode()).hexdigest()[:8]
 
-    def get_layer_url(self, bbox: tuple, variable: str, timestamp: datetime, ext=".png") -> Optional[str]:
+    def get_layer_url(self, bbox: tuple, variable: str, timestamp: datetime, ext=".tiff") -> Optional[str]:
         """
         Checks DB for existing cache entry. 
         Returns the Public URL of the file if found, else None.
