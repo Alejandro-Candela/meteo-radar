@@ -38,3 +38,4 @@ trials/*
 !trials/.gitkeep
 reports/
 planning/
+.cache.sqlite
