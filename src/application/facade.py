@@ -15,18 +15,39 @@ class MeteorologicalFacade:
         self.provider = provider
         # En el futuro, aquí inyectaremos el repositorio de caché
     
-    def get_radar_view(
+    def get_forecast_view(
         self, 
         region: BoundingBox, 
         time_window: TimeRange,
         high_resolution: bool = True
     ) -> xr.Dataset:
         """
-        Devuelve la vista de 'Radar' completa: Datos obtenidos + Interpolados.
+        Devuelve el pronóstico futuro interpolado.
         """
-        # 1. Obtener datos crudos (Estrategia seleccionada)
         raw_ds = self.provider.get_forecast(region, time_window)
-        
+        return self._process_dataset(raw_ds, high_resolution)
+
+    def get_history_view(
+        self, 
+        region: BoundingBox, 
+        time_window: TimeRange,
+        high_resolution: bool = True
+    ) -> xr.Dataset:
+        """
+        Devuelve el histórico interpolado.
+        """
+        # En el adapter usamos get_history (que actualmente reusa _fetch_openmeteo)
+        # Nota: WeatherDataProvider (Interface) necesita el update tambien, o usamos cast.
+        # Por ahora asumimos que el provider tiene get_history si es OpenMeteo.
+        if hasattr(self.provider, 'get_history'):
+            raw_ds = self.provider.get_history(region, time_window)
+        else:
+            # Fallback
+            raw_ds = self.provider.get_forecast(region, time_window)
+            
+        return self._process_dataset(raw_ds, high_resolution)
+
+    def _process_dataset(self, raw_ds: xr.Dataset, high_resolution: bool) -> xr.Dataset:
         if not high_resolution:
             return raw_ds
             
@@ -35,11 +56,10 @@ class MeteorologicalFacade:
         interpolated_ds = InterpolationService.interpolate(
             raw_ds, 
             target_resolution=0.01, 
-            method="linear" # Cubic es mas suave pero mas lento y puede generar artefactos negativos
+            method="linear" 
         )
         
-        # 3. Post-procesamiento opcional (Filtro Gaussiano para 'nubes', Clipping)
-        # Aseguramos que no haya precipitacion negativa por artefactos de interpolación
+        # 3. Post-procesamiento
         if 'precipitation' in interpolated_ds:
              interpolated_ds['precipitation'] = interpolated_ds['precipitation'].clip(min=0)
              
