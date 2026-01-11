@@ -59,10 +59,10 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     history_window = TimeRange(start=history_start, end=now)
     ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
-    # Subsample History to every 4 hours to reduce steps/requests
+    # Subsample History to every 2 hours
     # Slicing: [start:stop:step]
     if ds_history is not None:
-         ds_history = ds_history.sel(time=slice(None, None, 4))
+         ds_history = ds_history.sel(time=slice(None, None, 2))
     
     # 2. Forecast Block (Next 10 days)
     forecast_end = now + timedelta(days=10)
@@ -77,7 +77,34 @@ import matplotlib.colors as mcolors
 def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vmin=None, vmax=None):
     """
     Saves the data array as a colored PNG image without geospatial metadata embedded.
+    Enforces Lat Descending (North -> South) to match origin='upper'.
+    Handles 'latitude'/'lat'/'y' and 'longitude'/'lon'/'x'.
     """
+    # Identify coords
+    lat_dim = None
+    lon_dim = None
+    
+    for dim in ['latitude', 'lat', 'y']:
+        if dim in da.coords:
+            lat_dim = dim
+            break
+            
+    for dim in ['longitude', 'lon', 'x']:
+        if dim in da.coords:
+            lon_dim = dim
+            break
+
+    # Sort Lat Descending (North -> South)
+    if lat_dim:
+        da = da.sortby(lat_dim, ascending=False)
+        
+    # Transpose to (Lat, Lon)
+    if lat_dim and lon_dim and len(da.dims) >= 2:
+        try:
+            da = da.transpose(lat_dim, lon_dim)
+        except Exception:
+            pass
+
     # Normalize data
     data = da.values
     if vmin is None: vmin = np.nanmin(data)
@@ -97,7 +124,6 @@ def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vm
     colored_data = cmap(norm(data))
     
     # Set Alpha for NaNs
-    # xarray usually returns float, assumes NaNs are np.nan
     mask = np.isnan(data)
     colored_data[mask] = [0, 0, 0, 0] # Transparent
     
@@ -491,7 +517,7 @@ def main():
             value=max_hist,
             format="DD/MM HH:mm",
             key="slider_history",
-            step=timedelta(hours=4),
+            step=timedelta(hours=2),
             label_visibility="collapsed" # Compact
         )
         if st.session_state.slider_history != max_hist: # Simple heuristic: if user moved it
@@ -593,12 +619,45 @@ def main():
     )
     m.add_basemap("CARTODB_POSITRON")
     
-    map_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+    # --- Overlay Bounds Calculation ---
+    # Determine actual rendering bounds from the dataset, not the requested bbox.
+    # This prevents misalignment if the grid is snapped or resolution causes valid pixels to not fill the box.
+    try:
+        # Determine dimension names
+        lat_dim = 'latitude' if 'latitude' in active_ds.coords else 'lat' if 'lat' in active_ds.coords else 'y'
+        lon_dim = 'longitude' if 'longitude' in active_ds.coords else 'lon' if 'lon' in active_ds.coords else 'x'
+        
+        lats = active_ds[lat_dim].values
+        lons = active_ds[lon_dim].values
+        
+        # Calculate bounds: [South-West, North-East] -> [MinLat, MinLon], [MaxLat, MaxLon]
+        # BUT Leaflet/Folium ImageOverlay expects corners: [[lat_min, lon_min], [lat_max, lon_max]]
+        # Wait, for ImageOverlay we usually give [[min_lat, min_lon], [max_lat, max_lon]]
+        
+        actual_min_lat = float(lats.min())
+        actual_max_lat = float(lats.max())
+        actual_min_lon = float(lons.min())
+        actual_max_lon = float(lons.max())
+        
+        # We must extend the bounds by half-pixel to cover the area "around" the point?
+        # xarray coordinates are usually centers.
+        # Resolution is assumed from input or calculated?
+        # Let's trust the corners of the points for now, or check resolution.
+        # If we just use point min/max, we lose half a pixel on each side.
+        # Let's try point-bounds first.
+        
+        overlay_bounds = [[actual_min_lat, actual_min_lon], [actual_max_lat, actual_max_lon]]
+        # st.caption(f"Debug Bounds: {overlay_bounds}")
+        
+    except Exception as e:
+        print(f"Bounds Error: {e}")
+        # Fallback
+        overlay_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
     if path_to_render:
          folium.raster_layers.ImageOverlay(
              image=path_to_render,
-             bounds=map_bounds,
+             bounds=overlay_bounds,
              name="Radar Precipitación",
              opacity=0.6,
              interactive=False,
@@ -620,7 +679,7 @@ def main():
             
             folium.raster_layers.ImageOverlay(
                 image=t_path,
-                bounds=map_bounds,
+                bounds=overlay_bounds,
                 name="Temperatura (ºC)",
                 opacity=0.5,
                 interactive=False,
@@ -643,7 +702,7 @@ def main():
             
             folium.raster_layers.ImageOverlay(
                 image=p_path,
-                bounds=map_bounds,
+                bounds=overlay_bounds,
                 name="Presión (hPa)",
                 opacity=0.5,
                 interactive=False,
@@ -664,7 +723,7 @@ def main():
             
             folium.raster_layers.ImageOverlay(
                 image=w_path,
-                bounds=map_bounds,
+                bounds=overlay_bounds,
                 name="Viento (km/h)",
                 opacity=0.6,
                 interactive=False,
