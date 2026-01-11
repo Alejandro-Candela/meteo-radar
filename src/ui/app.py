@@ -745,9 +745,11 @@ def main():
     # If we call it again, strict re-render is needed for the new HTML to show.
     # If we use a static key, Streamlit replaces the component if the args (html) changed?
     # Actually, the 'key' in st.components.v1.html is for state preservation.
-    # Use dynamic key to force full re-render on time change (avoids stale iframe)
+    # Display Map - Use static key to prevent full reload (blinking)
+    # Streamlit-folium/Leafmap should detect the diff in the Folium object (new overlay) and update the layer.
     st.caption(f"Debug: Rendering {active_time}")
-    m.to_streamlit(height=600, key=f"map_{active_time.isoformat()}") 
+    # m.to_streamlit(height=600, key=f"map_{active_time.isoformat()}") 
+    m.to_streamlit(height=600, key="radar_map") 
     
     # Cleanup
     # shutil.rmtree(tmp_dir) 
