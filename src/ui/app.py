@@ -17,6 +17,7 @@ sys.path.append(str(root_path))
 
 from src.adapters.openmeteo import OpenMeteoAdapter
 from src.application.facade import MeteorologicalFacade
+from src.application.exporter import BulkExportService
 from src.domain.model import BoundingBox, TimeRange
 
 # --- Configuration ---
@@ -150,6 +151,79 @@ def get_radar_legend_html():
         </div>
     """
 
+@st.dialog("📁 Exportar Datos")
+def show_export_dialog(min_lat, max_lat, min_lon, max_lon, resolution):
+    st.write("Configura el rango de descarga:")
+    
+    # 1. Date Range
+    today = datetime.now().date()
+    # Default: today and tomorrow
+    date_range = st.date_input(
+        "Rango de Fechas (Máx 10 días)",
+        value=(today, today + timedelta(days=1)),
+        min_value=today - timedelta(days=365),
+        max_value=today + timedelta(days=365),
+        format="DD/MM/YYYY"
+    )
+    
+    # Validate range
+    start_date, end_date = today, today
+    if isinstance(date_range, tuple):
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+        elif len(date_range) == 1:
+            start_date = end_date = date_range[0]
+            
+    days_diff = (end_date - start_date).days + 1
+    
+    if days_diff > 10:
+        st.error(f"⚠️ El rango seleccionado ({days_diff} días) excede el máximo permitido de 10 días.")
+        valid_config = False
+    elif days_diff < 1:
+        st.error("Selecciona al menos 1 día.")
+        valid_config = False
+    else:
+        valid_config = True
+        
+    # 2. Interval
+    interval = st.slider("Intervalo (horas)", 1, 3, 1)
+    
+    # Estimate
+    if valid_config:
+        total_hours = days_diff * 24
+        est_images = int(total_hours / interval)
+        st.info(f"📸 Se generarán aproximadamente **{est_images}** imágenes TIFF.")
+    
+    st.divider()
+    
+    if st.button("🚀 Confirmar Exportación", disabled=not valid_config, type="primary"):
+        if valid_config:
+            exporter = BulkExportService()
+            with st.spinner("Generando y comprimiendo imágenes..."):
+                try:
+                    # Convert date to datetime for service (Time 00:00)
+                    dt_start = datetime.combine(start_date, datetime.min.time())
+                    dt_end = datetime.combine(end_date, datetime.min.time())
+                    
+                    zip_path, count = exporter.generate_bulk_zip(
+                        dt_start, dt_end, interval, 
+                        (min_lat, max_lat, min_lon, max_lon), 
+                        resolution
+                    )
+                    
+                    st.success(f"✅ ¡Exportación completada! {count} imágenes.")
+                    
+                    # Read zip for download
+                    with open(zip_path, "rb") as fp:
+                        st.download_button(
+                            label="📥 Descargar ZIP",
+                            data=fp,
+                            file_name=os.path.basename(zip_path),
+                            mime="application/zip"
+                        )
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
 def main():
     inject_custom_css()
     st.title("📡 Meteo Radar - Dual Timeline")
@@ -212,6 +286,10 @@ def main():
         
         # --- Legend in Sidebar ---
         st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
+        
+        st.divider()
+        if st.button("📁 Exportar Datos..."):
+            show_export_dialog(min_lat, max_lat, min_lon, max_lon, selected_resolution)
 
     # --- Data Loading ---
     with st.spinner("Sincronizando modelos meteorológicos..."):
