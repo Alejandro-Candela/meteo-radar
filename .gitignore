@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv/
+venv/
+ENV/
+env/
+.idea/
+.vscode/
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Unit testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Meteo Data & Cache
+*.nc
+*.h5
+*.hdf5
+*.zarr
+*.tiff
+*.tif
+data_cache/
+
+# User directories
+trials/
+# Keep gitkeep in trials if needed, but ignore content
+trials/*
+!trials/.gitkeep
