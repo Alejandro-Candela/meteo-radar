@@ -1,0 +1,15 @@
+leafmap
+numpy
+openmeteo-requests
+pandas
+psutil
+pydantic
+pydantic-settings
+requests-cache
+retry-requests
+rioxarray
+scipy
+streamlit
+supabase
+xarray
+gdal>=3.0.0; platform_system!="Windows"
