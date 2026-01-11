@@ -1,4 +1,4 @@
-# Handover Report - Start of Week 8 (Data Products)
+# Handover Report - Completion of Week 8 (Data Products)
 
 **Date**: 2026-01-11
 **To**: Senior Developer
@@ -6,44 +6,43 @@
 
 ## Current Status
 
-We have successfully completed the visual refinement phase (Week 7) and are starting Week 8 with a focus on **Data Products** and **Extended Capabilities**. The "Bulk Export" feature has been implemented but is currently paused to prioritize core data layer expansion.
+We have successfully completed **Week 8 (Data Products)**. The Application now supports multi-variable analysis (Temperature, Pressure, Wind) and an extended 15-day forecast/history range. All changes have been merged to the `main` branch.
 
-## Completed Recently
-
-1. **Visuals**:
-    - Resolution selector (High/Medium/Low).
-    - Legend moved to Sidebar.
-    - Improved slider layout.
-2. **Infrastructure**:
-    - License (PolyForm Noncommercial) added.
-    - `README.md` updated.
-3. **Export (Partial)**:
-    - Service and Dialog implemented.
-    - *Known Issue*: Needs final verification after a restart/import fix. (Paused per user request).
-
-## Immediate Next Steps (Priority)
-
-The roadmap has been updated to prioritize the following **before** finalizing export:
+## Completed Items
 
 1. **Multi-Variable Layers**:
-    - Add `Temperature`, `Pressure`, and `Wind` to the Open-Meteo fetcher.
-    - Add Sidebar Checkboxes to toggle these layers.
-    - Ensure they overlay correctly on the map.
-
+    - Integrated `temperature_2m`, `surface_pressure`, `wind_speed_10m` from Open-Meteo.
+    - Added Sidebar Checkboxes ("Capas") to toggle overlays.
+    - Implemented specific colormaps (`RdYlBu_r` for Temp, `viridis` for Pressure, `YlOrRd` for Wind).
 2. **Extended Range (15 Days)**:
-    - Update sliders in `app.py` to allow -15 days (History) and +15 days (Forecast).
-    - Limit verification: Ensure Open-Meteo adapter handles this grid size without timeout.
+    - Updated `OpenMeteoAdapter` and `app.py` sliders to support -15 to +15 days.
+    - Optimized caching (`@st.cache_resource`) to handle larger datasets (~2GB unpickled) without crashing.
+    - Set default resolution to "Baja" (0.05 deg) for stability on load.
+3. **Infrastructure**:
+    - Resolved Git conflicts and locked files.
+    - Added `.cache.sqlite` to `.gitignore`.
+    - Merged `multi-layers` branch into `main`.
 
-## Key Files to Touch
+## Pending / Next Steps (Phase 5)
 
-- `src/adapters/openmeteo.py`: Add new variables to API call.
-- `src/application/facade.py`: Ensure processing pipeline handles multiple data arrays in the Dataset.
-- `src/ui/app.py`: Add checkboxes and render logic.
+1. **Bulk Export**:
+    - Feature is implemented (Service & Dialog) but currently paused/hidden or needs final verification in `main`.
+    - *Action*: Verify and re-enable if stable.
+2. **Reliability & Testing**:
+    - Setup `tests/` folder with `pytest`.
+    - Add unit tests for `OpenMeteoAdapter` and `MeteorologicalFacade`.
+3. **Containerization**:
+    - Prepare `Dockerfile` for deployment.
+
+## Key Files Modified
+
+- `src/ui/app.py`: UI logic, Caching strategy, Layer rendering.
+- `src/adapters/openmeteo.py`: Fetch logic (Dynamic variables).
+- `.gitignore`: Added cache exclusions.
 
 ## Notes
 
-- **Architecture**: We are sticking to the Hexagonal pattern.
-- **Stack**: Python, Streamlit, Xarray, Leafmap.
-- **Documentation**: `planning/roadmap.md` and `planning/architecture.md` are up to date.
+- **Performance**: Loading 15 days of data at "High" resolution is memory-intensive. Consider implementing lazy loading or warning the user.
+- **Architecture**: System remains fully modular (Hexagonal).
 
-*Ready to start coding Feature 6 & 7.*
+*Ready for Phase 5: Reliability & Production.*
