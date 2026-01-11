@@ -54,13 +54,13 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     
-    # 1. History Block (Last 3 days)
-    history_start = now - timedelta(days=3)
+    # 1. History Block (Last 15 days)
+    history_start = now - timedelta(days=15)
     history_window = TimeRange(start=history_start, end=now)
     ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
-    # 2. Forecast Block (Next 3 days)
-    forecast_end = now + timedelta(days=3)
+    # 2. Forecast Block (Next 10 days)
+    forecast_end = now + timedelta(days=10)
     forecast_window = TimeRange(start=now, end=forecast_end)
     ds_forecast = facade.get_forecast_view(bbox, forecast_window, resolution=resolution)
     
