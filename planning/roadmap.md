@@ -1,67 +1,46 @@
-# Roadmap de Ejecución: MVP Radar Meteorológico (8 Semanas)
+# Roadmap de Ejecución: MVP Radar Meteorológico (Revisión Semana 8)
 
 ## Objetivo
 
-Lanzar un MVP funcional que visualice datos de precipitación interpolados ("Falso Radar") a partir de Open-Meteo en una interfaz Streamlit, con una arquitectura preparada para escalar.
+Lanzar un MVP funcional que visualice datos de precipitación interpolados y variables meteorológicas (Falso Radar) a partir de Open-Meteo en una interfaz Streamlit, con una arquitectura preparada para escalar.
 
-## Mes 1: Fundamentos y "Falso Radar"
+## Mes 1: Fundamentos y "Falso Radar" (COMPLETADO)
 
-### Semana 1: Configuración y Núcleo Arquitectónico
+### Semana 1-4: Core Architecture & MVP V1
 
-- **Objetivos**: Setup del entorno, definición de interfaces.
-- [ ] Inicializar proyecto `uv` y repositorio Git.
-- [ ] Definir estructura de carpetas (Hexagonal).
-- [ ] Implementar clase abstracta `WeatherDataProvider` (Pattern Strategy).
-- [ ] Configurar CI/CD básico (Linter/Tests).
-
-### Semana 2: Ingesta de Datos y Normalización (Open-Meteo)
-
-- **Objetivos**: Traer datos y estandarizarlos.
-- [ ] Implementar `OpenMeteoStrategy` usando `openmeteo-requests` y `FlatBuffers`.
-- [ ] Implementar conversión a `xarray.Dataset`.
-- [ ] Normalización de unidades y coordenadas (WGS84).
-
-### Semana 3: Motor de Interpolación y Facade
-
-- **Objetivos**: Convertir puntos en campos visuales.
-- [ ] Crear `MeteorologicalFacade`.
-- [ ] Implementar algoritmos de interpolación (`scipy.griddata`) para generar la malla regular.
-- [ ] Optimización básica (caching de mallas estáticas).
-
-### Semana 4: Visualización MVP (Streamlit)
-
-- **Objetivos**: Primera interfaz de usuario.
-- [ ] Setup de Streamlit con `st.session_state` para gestión de estado.
-- [ ] Integración de `leafmap` para renderizar capas raster.
-- [ ] Visualización estática del campo de precipitación actual.
+- [x] **Arquitectura**: Setup Hexagonal, `uv` manager.
+- [x] **Datos**: Ingesta Open-Meteo, Xarray, Interpolación Scipy.
+- [x] **UI**: Streamlit + Leafmap (Renderizado estático).
+- [x] **Caching**: `requests-cache`.
 
 ---
 
-## Mes 2: Robustez, Animación e Integración Real
+## Mes 2: UX, Dual-Mode y Productos de Datos (EN PROGRESO)
 
-### Semana 5: Animación Temporal y UX
+### Semana 5-6: Dual Mode & Advanced UX (COMPLETADO)
 
-- **Objetivos**: Experiencia de usuario fluida.
-- [ ] Implementar slider temporal (24h predicción).
-- [ ] Generación de assets para animación (GIF backend o capas dinámicas).
-- [ ] Optimización de carga (Lazy evaluation).
+- [x] Refactor Dual-Mode (Histórico/Forecast).
+- [x] Sliders independientes (Past -24h / Future +24h).
+- [x] Expansión a Escala Macro (Península Ibérica + Francia).
+- [x] Visualización optimizada (Color palettes, Non-zero filtering).
 
-### Semana 6: Worker Asíncrono y Persistencia
+### Semana 7: Visual Refinements & Housekeeping (COMPLETADO)
 
-- **Objetivos**: Preparación para datos pesados.
-- [ ] Implementar sistema de caché persistente (`Zarr` o disco local estructurado).
-- [ ] Desacoplar la descarga de datos de la visualización (Background worker simple).
+- [x] Selector de Resolución (High/Medium/Low).
+- [x] Leyenda en Sidebar.
+- [x] Layout UI mejorado (Sliders on top).
+- [x] Licenciamiento (PolyForm Noncommercial).
 
-### Semana 7: Hardening y Preparación AEMET
+### Semana 8: Data Products & New Layers (ACTUAL)
 
-- **Objetivos**: Estabilidad y deuda técnica.
-- [ ] Implementar manejo de errores robusto (Circuit Breaker para APIs).
-- [ ] Setup de pruebas de integración e infraestructura para ingesta de HDF5 (Investigación AEMET).
-- [ ] Refactorización basada en feedback del MVP.
+- **Objetivo**: Ampliar variables y horizonte temporal.
+- [ ] **Multi-Variable Layers**: Temperatura, Presión, Viento (Checkboxes UI).
+- [ ] **Extended Range**: Ampliar histórico y forecast a 15 días.
+- [ ] **Animation**: Reproducción temporal (Time-series playback).
 
-### Semana 8: Lanzamiento y Documentación Final
+### Semana 9-10: Reliability, Export & Production (FINAL)
 
-- **Objetivos**: Entrega del MVP.
-- [ ] Dockerización completa (Dockerfile, docker-compose).
-- [ ] Documentación de usuario y técnica final.
-- [ ] Planificación de la Fase 2 (Integración real AEMET).
+- [ ] **Bulk Export**: Descarga de series temporales (ZIP/TIFF) [En Pausa - Bugfix pendiente].
+- [ ] **Testing**: Unit & Integration Tests.
+- [ ] **Containerization**: Docker.
+- [ ] **Optimization**: Binary Workers para cargas pesadas.

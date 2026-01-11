@@ -1,4 +1,4 @@
-# Architectural Decision Record (ADR) - Sistema de Radar Meteorológico Modular
+y# Architectural Decision Record (ADR) - Sistema de Radar Meteorológico Modular
 
 ## 1. Contexto y Visión
 
@@ -42,6 +42,7 @@ El objetivo es construir un sistema de predicción inmediata (nowcasting) que ev
 
 - **Framework**: `Streamlit`.
 - **Mapas**: `leafmap` (Backend folium/ipyleaflet ligero). Soporte de capas raster.
+- **Gestión de Capas**: Checkboxes independientes para overlay de variables (Temperatura, Presión, Viento) sobre la precipitación.
 - **Gráficos**: `plotly` o `altair` nativo de Streamlit.
 
 ### 3.4 API & Backend
