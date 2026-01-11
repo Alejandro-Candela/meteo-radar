@@ -68,10 +68,28 @@ class OpenMeteoAdapter(WeatherDataProvider):
         end_str = time_window.end.strftime("%Y-%m-%d")
 
         # 2. Configurar params API
+        # Definir variables a pedir
+        requested_vars = [
+            "precipitation", 
+            "temperature_2m", 
+            "surface_pressure", 
+            "wind_speed_10m", 
+            "wind_direction_10m"
+        ]
+        
+        # Mapping API names to Internal names
+        name_map = {
+            "precipitation": "precipitation",
+            "temperature_2m": "temperature",
+            "surface_pressure": "pressure",
+            "wind_speed_10m": "wind_speed",
+            "wind_direction_10m": "wind_direction"
+        }
+
         params = {
             "latitude": flat_lats,
             "longitude": flat_lons,
-            "hourly": ["precipitation", "weather_code", "cloud_cover"],
+            "hourly": requested_vars,
             "start_date": start_str,
             "end_date": end_str,
             "models": "best_match"
@@ -95,18 +113,48 @@ class OpenMeteoAdapter(WeatherDataProvider):
         n_lats = len(lats)
         n_lons = len(lons)
         
-        precip_values = np.zeros((n_points, n_times), dtype=np.float32)
+        # Prepare Data Dict
+        data_arrays = {}
         
-        for i, response in enumerate(responses):
-            precip_values[i] = response.Hourly().Variables(0).ValuesAsNumpy()
+        # Initialize containers
+        # We need a dict of numpy arrays: { "temp": np.zeros(...) }
+        temp_containers = {}
+        for var_api in requested_vars:
+            internal_name = name_map[var_api]
+            temp_containers[internal_name] = np.zeros((n_points, n_times), dtype=np.float32)
             
-        precip_3d = precip_values.reshape((n_lats, n_lons, n_times))
-        precip_3d = np.transpose(precip_3d, (2, 0, 1))
+        # Fill containers
+        for i, response in enumerate(responses):
+            hourly_data = response.Hourly()
+            for v_idx, var_api in enumerate(requested_vars):
+                 internal_name = name_map[var_api]
+                 # ValuesAsNumpy casts to float32 usually
+                 temp_containers[internal_name][i] = hourly_data.Variables(v_idx).ValuesAsNumpy()
         
+        # Reshape and add to DataVars
+        data_vars_dict = {}
+        for internal_name, flat_data in temp_containers.items():
+            # Reshape (N_Points, Time) -> (Lat, Lon, Time)
+            # Correct logic:
+            # Grid was constructed with meshgrid(lons, lats).
+            # Flatten order: default C (row-major). 
+            # So rows are Lats, Cols are Lons.
+            
+            # NOTE: flat_lats = grid_lat.flatten()
+            # If shape was (N_Lats, N_Lons), flatten walks Lons then Lats?
+            # grid_lon, grid_lat = meshgrid(lons, lats) -> shape (N_Lats, N_Lons)
+            # flatten() -> [ (lat0, lon0), (lat0, lon1)... ]
+            # So first dimension of reshape should be N_Lats, second N_Lons.
+            
+            reshaped = flat_data.reshape((n_lats, n_lons, n_times))
+            
+            # Transpose to (Time, Lat, Lon) standard Xarray
+            reshaped = np.transpose(reshaped, (2, 0, 1))
+            
+            data_vars_dict[internal_name] = (("time", "y", "x"), reshaped)
+
         ds = xr.Dataset(
-            data_vars={
-                "precipitation": (("time", "y", "x"), precip_3d),
-            },
+            data_vars=data_vars_dict,
             coords={
                 "time": time_steps,
                 "y": lats,

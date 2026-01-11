@@ -43,13 +43,13 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     
-    # 1. History Block (Last 10 days)
-    history_start = now - timedelta(days=10)
+    # 1. History Block (Last 15 days)
+    history_start = now - timedelta(days=15)
     history_window = TimeRange(start=history_start, end=now)
     ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
-    # 2. Forecast Block (Next 24h)
-    forecast_end = now + timedelta(hours=24)
+    # 2. Forecast Block (Next 15 days)
+    forecast_end = now + timedelta(days=15)
     forecast_window = TimeRange(start=now, end=forecast_end)
     ds_forecast = facade.get_forecast_view(bbox, forecast_window, resolution=resolution)
     
@@ -159,7 +159,7 @@ def show_export_dialog(min_lat, max_lat, min_lon, max_lon, resolution):
     today = datetime.now().date()
     # Default: today and tomorrow
     date_range = st.date_input(
-        "Rango de Fechas (Máx 10 días)",
+        "Rango de Fechas (Máx 15 días)",
         value=(today, today + timedelta(days=1)),
         min_value=today - timedelta(days=365),
         max_value=today + timedelta(days=365),
@@ -176,8 +176,8 @@ def show_export_dialog(min_lat, max_lat, min_lon, max_lon, resolution):
             
     days_diff = (end_date - start_date).days + 1
     
-    if days_diff > 10:
-        st.error(f"⚠️ El rango seleccionado ({days_diff} días) excede el máximo permitido de 10 días.")
+    if days_diff > 15:
+        st.error(f"⚠️ El rango seleccionado ({days_diff} días) excede el máximo permitido de 15 días.")
         valid_config = False
     elif days_diff < 1:
         st.error("Selecciona al menos 1 día.")
@@ -287,6 +287,14 @@ def main():
         # --- Legend in Sidebar ---
         st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
         
+        # --- Layer Control ---
+        st.divider()
+        st.subheader("🗺️ Capas")
+        show_precip = st.checkbox("🌧️ Precipitación", value=True)
+        show_temp = st.checkbox("🌡️ Temperatura", value=False)
+        show_pressure = st.checkbox("⏲️ Presión", value=False)
+        show_wind = st.checkbox("💨 Viento", value=False)
+        
         st.divider()
         if st.button("📁 Exportar Datos..."):
             show_export_dialog(min_lat, max_lat, min_lon, max_lon, selected_resolution)
@@ -379,21 +387,37 @@ def main():
     # --- Map Rendering ---
     # Select Data
     try:
-        layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
+        if show_precip and 'precipitation' in active_ds:
+             layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
+        elif 'precipitation' in active_ds:
+             # Logic if precip is OFF but other layer is ON? 
+             # Just use precip for Stats, but don't error.
+             layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
+        else:
+             # Should not happen if fetch works
+             layer_data = None
+             
     except KeyError:
         st.warning("Hora fuera de rango para el dataset seleccionado.")
         return
+        
+    if layer_data is not None:
+        # Calculate Stats (Precipitation is primary)
+        max_precip = layer_data.max().item()
+        mean_precip = layer_data.mean().item()
+        col_info2.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
+        col_info3.metric("Promedio", f"{mean_precip:.2f}")
 
-    # Calculate Stats
-    max_precip = layer_data.max().item()
-    mean_precip = layer_data.mean().item()
-    col_info2.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
-    col_info3.metric("Promedio", f"{mean_precip:.2f}")
-
-    # Generate TIFF
-    tmp_dir = tempfile.mkdtemp()
-    tmp_path = os.path.join(tmp_dir, "active_radar.tif")
-    create_geotiff(layer_data, tmp_path)
+        # Generate TIFF (For Precip Base)
+        if show_precip:
+             tmp_dir = tempfile.mkdtemp()
+             tmp_path = os.path.join(tmp_dir, "active_radar.tif")
+             create_geotiff(layer_data, tmp_path)
+        else:
+             tmp_dir = tempfile.mkdtemp() # Create anyway for others
+    else:
+        tmp_dir = tempfile.mkdtemp()
+        max_precip = 0
 
     # Map
     m = leafmap.Map(
@@ -415,6 +439,71 @@ def main():
         vmin=0,
         vmax=max(5.0, max_precip) 
     )
+    
+    # --- New Layers Rendering ---
+    
+    # 1. Temperature
+    if show_temp and 'temperature' in active_ds:
+        try:
+            temp_data = active_ds['temperature'].sel(time=active_time, method="nearest")
+            tmp_t_path = os.path.join(tmp_dir, "temp.tif")
+            create_geotiff(temp_data, tmp_t_path)
+            
+            # Auto-scale for temp
+            t_min = temp_data.min().item()
+            t_max = temp_data.max().item()
+            
+            m.add_raster(
+                tmp_t_path,
+                layer_name="Temperatura (ºC)",
+                colormap="RdYlBu_r",
+                opacity=0.5,
+                vmin=t_min,
+                vmax=t_max
+            )
+        except Exception:
+            pass
+
+    # 2. Pressure
+    if show_pressure and 'pressure' in active_ds:
+        try:
+            press_data = active_ds['pressure'].sel(time=active_time, method="nearest")
+            tmp_p_path = os.path.join(tmp_dir, "pressure.tif")
+            create_geotiff(press_data, tmp_p_path)
+            
+            p_min = press_data.min().item()
+            p_max = press_data.max().item()
+            
+            m.add_raster(
+                tmp_p_path,
+                layer_name="Presión (hPa)",
+                colormap="viridis",
+                opacity=0.5,
+                vmin=p_min,
+                vmax=p_max
+            )
+        except Exception:
+            pass
+
+    # 3. Wind Speed
+    if show_wind and 'wind_speed' in active_ds:
+        try:
+            wind_data = active_ds['wind_speed'].sel(time=active_time, method="nearest")
+            tmp_w_path = os.path.join(tmp_dir, "wind.tif")
+            create_geotiff(wind_data, tmp_w_path)
+            
+            w_max = wind_data.max().item()
+            
+            m.add_raster(
+                tmp_w_path,
+                layer_name="Viento (km/h)",
+                colormap="YlOrRd",
+                opacity=0.6,
+                vmin=0,
+                vmax=max(10.0, w_max)
+            )
+        except Exception:
+            pass
     
     # Display Map - Static Key to prevent full reload
     # We use a static key 'main_map'. Streamlit might cache the iframe.
