@@ -18,5 +18,6 @@ dependencies = [
     "rioxarray>=0.20.0",
     "scipy>=1.17.0",
     "streamlit>=1.52.2",
+    "supabase>=2.27.1",
     "xarray>=2025.12.0",
 ]

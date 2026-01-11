@@ -19,11 +19,19 @@ from src.adapters.openmeteo import OpenMeteoAdapter
 from src.application.facade import MeteorologicalFacade
 from src.application.exporter import BulkExportService
 from src.domain.model import BoundingBox, TimeRange
+from src.adapters.supabase_client import SupabaseClient
 
 # --- Configuration ---
 st.set_page_config(layout="wide", page_title="Meteo Radar AI - Dual Mode")
 
 # --- Helper Functions ---
+@st.cache_resource
+def get_supabase():
+    try:
+        return SupabaseClient()
+    except:
+        return None
+
 @st.cache_resource
 def get_facade():
     adapter = OpenMeteoAdapter()
@@ -59,6 +67,34 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
 def create_geotiff(da: xr.DataArray, filename: str):
     da = da.rio.write_crs("EPSG:4326")
     da.rio.to_raster(filename)
+
+def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime) -> str:
+    if client is None:
+        tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+        create_geotiff(da, tmp.name)
+        return tmp.name
+
+    # 1. Try Cache
+    url = client.get_tiff_url(bbox, variable, timestamp)
+    if url:
+        return url
+    
+    # 2. Cache Miss: Generate & Upload
+    fd, local_path = tempfile.mkstemp(suffix=".tif")
+    os.close(fd)
+    create_geotiff(da, local_path)
+    
+    # Upload (Fire and forget ideal, but sync for now)
+    uploaded_url = client.upload_tiff(local_path, bbox, variable, timestamp)
+    
+    if uploaded_url:
+        try:
+             os.remove(local_path) # Cleanup if uploaded
+        except:
+             pass
+        return uploaded_url
+    else:
+        return local_path
 
 def inject_custom_css():
     st.markdown("""
@@ -409,13 +445,18 @@ def main():
         col_info2.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
         col_info3.metric("Promedio", f"{mean_precip:.2f}")
 
-        # Generate TIFF (For Precip Base)
+        # Cloud Cache for Precipitation
+        bbox_tuple = (min_lat, max_lat, min_lon, max_lon)
+        supabase = get_supabase()
+        
+        path_to_render = None
+        
         if show_precip:
-             tmp_dir = tempfile.mkdtemp()
-             tmp_path = os.path.join(tmp_dir, "active_radar.tif")
-             create_geotiff(layer_data, tmp_path)
+             path_to_render = get_or_upload_layer(supabase, layer_data, "precipitation", bbox_tuple, active_time)
         else:
-             tmp_dir = tempfile.mkdtemp() # Create anyway for others
+             # Just create temp for others logic to hold if needed?
+             # No, if hidden we don't render. 
+             path_to_render = None
     else:
         tmp_dir = tempfile.mkdtemp()
         max_precip = 0
@@ -431,15 +472,16 @@ def main():
     
     radar_palette = ["#00000000", "#7CFC00", "#32CD32", "#FFFF00", "#FF8C00", "#FF0000"]
     
-    m.add_raster(
-        tmp_path, 
-        layer_name="Radar Precipitación", 
-        colormap=radar_palette, 
-        opacity=0.6,
-        nodata=np.nan,
-        vmin=0,
-        vmax=max(5.0, max_precip) 
-    )
+    if path_to_render:
+        m.add_raster(
+            path_to_render, 
+            layer_name="Radar Precipitación", 
+            colormap=radar_palette, 
+            opacity=0.6,
+            nodata=np.nan,
+            vmin=0,
+            vmax=max(5.0, max_precip) 
+        )
     
     # --- New Layers Rendering ---
     
@@ -447,36 +489,35 @@ def main():
     if show_temp and 'temperature' in active_ds:
         try:
             temp_data = active_ds['temperature'].sel(time=active_time, method="nearest")
-            tmp_t_path = os.path.join(tmp_dir, "temp.tif")
-            create_geotiff(temp_data, tmp_t_path)
+            t_path = get_or_upload_layer(supabase, temp_data, "temperature", bbox_tuple, active_time)
             
             # Auto-scale for temp
             t_min = temp_data.min().item()
             t_max = temp_data.max().item()
             
             m.add_raster(
-                tmp_t_path,
+                t_path,
                 layer_name="Temperatura (ºC)",
                 colormap="RdYlBu_r",
                 opacity=0.5,
                 vmin=t_min,
                 vmax=t_max
             )
-        except Exception:
+        except Exception as e:
+            # st.error(f"Temp Error: {e}") 
             pass
 
     # 2. Pressure
     if show_pressure and 'pressure' in active_ds:
         try:
             press_data = active_ds['pressure'].sel(time=active_time, method="nearest")
-            tmp_p_path = os.path.join(tmp_dir, "pressure.tif")
-            create_geotiff(press_data, tmp_p_path)
+            p_path = get_or_upload_layer(supabase, press_data, "pressure", bbox_tuple, active_time)
             
             p_min = press_data.min().item()
             p_max = press_data.max().item()
             
             m.add_raster(
-                tmp_p_path,
+                p_path,
                 layer_name="Presión (hPa)",
                 colormap="viridis",
                 opacity=0.5,
@@ -490,13 +531,12 @@ def main():
     if show_wind and 'wind_speed' in active_ds:
         try:
             wind_data = active_ds['wind_speed'].sel(time=active_time, method="nearest")
-            tmp_w_path = os.path.join(tmp_dir, "wind.tif")
-            create_geotiff(wind_data, tmp_w_path)
+            w_path = get_or_upload_layer(supabase, wind_data, "wind_speed", bbox_tuple, active_time)
             
             w_max = wind_data.max().item()
             
             m.add_raster(
-                tmp_w_path,
+                w_path,
                 layer_name="Viento (km/h)",
                 colormap="YlOrRd",
                 opacity=0.6,
