@@ -59,6 +59,11 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     history_window = TimeRange(start=history_start, end=now)
     ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
+    # Subsample History to every 4 hours to reduce steps/requests
+    # Slicing: [start:stop:step]
+    if ds_history is not None:
+         ds_history = ds_history.sel(time=slice(None, None, 4))
+    
     # 2. Forecast Block (Next 10 days)
     forecast_end = now + timedelta(days=10)
     forecast_window = TimeRange(start=now, end=forecast_end)
@@ -323,10 +328,10 @@ def main():
         # Mungia Center: 43.3, -2.7. 
         # Box: Lat 41.3-45.3, Lon -4.7 to -0.7 covers huge part of N.Spain/Bay of Biscay
         region_options = {
-            "Norte (Mungia/Euskadi)": (41.5, 45.0, -5.0, -0.5),
-            "Centro (Madrid)": (38.0, 42.0, -6.0, -1.0),
-            "Este (Barcelona/Cat)": (39.5, 43.5, -1.0, 5.0),
-            "Noroeste (Galicia)": (41.0, 44.5, -10.0, -6.0),
+            "Norte (Mungia/Euskadi)": (38.0, 48.0, -8.0, 2.0),   # 10x10 roughly centered on North
+            "Centro (Madrid)": (35.0, 45.0, -9.0, 1.0),          # 10x10 centered on center
+            "Este (Barcelona/Cat)": (36.0, 46.0, -3.0, 7.0),     # 10x10 centered on East
+            "Noroeste (Galicia)": (38.0, 48.0, -14.0, -4.0),     # 10x10 centered on NW
         }
         # Default to Mungia/Norte
         selected_region_name = st.selectbox("Seleccionar Zona", list(region_options.keys()), index=0)
@@ -342,8 +347,8 @@ def main():
                 parts = [float(p.strip()) for p in custom_coords.split(',')]
                 if len(parts) == 2:
                     c_lat, c_lon = parts
-                    # Create a MACRO window (approx 400x400km) to ensure "full map" feel
-                    delta = 2.0 # +/- 2.0 deg = 4.0 deg span
+                    # Create a MACRO window (approx 1000x1000km)
+                    delta = 5.0 # +/- 5.0 deg = 10.0 deg span (Huge area)
                     min_lat, max_lat = c_lat - delta, c_lat + delta
                     min_lon, max_lon = c_lon - delta, c_lon + delta
                     st.toast(f"Usando coordenadas personalizadas: {c_lat}, {c_lon}", icon="🎯")
