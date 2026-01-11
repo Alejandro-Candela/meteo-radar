@@ -38,8 +38,22 @@ class OpenMeteoAdapter(WeatherDataProvider):
         return self._fetch_openmeteo(region, time_window, is_history=False)
 
     def _fetch_openmeteo(self, region: BoundingBox, time_window: TimeRange, is_history: bool) -> xr.Dataset:
-        # 1. Definir Grid de Consulta (Resolución "Coarse" para reducir llamadas)
-        resolution = 0.1 
+        # 1. Definir Grid de Consulta Optimizado
+        # Open-Meteo GET requests have URL length limits.
+        # We must limit the number of points requested.
+        # Max ~150 points keeps URL safe (~4-6kb).
+        MAX_POINTS = 100
+        
+        lat_span = region.max_lat - region.min_lat
+        lon_span = region.max_lon - region.min_lon
+        
+        # Calculate resolution to stay within MAX_POINTS
+        # (lat_points * lon_points) = (span/res) * (span/res) = MAX_POINTS
+        # res = sqrt((lat_span * lon_span) / MAX_POINTS)
+        resolution = np.sqrt((lat_span * lon_span) / MAX_POINTS)
+        
+        # Ensure minimal resolution (e.g. not denser than 0.05)
+        resolution = max(0.05, resolution)
         
         lats = np.arange(region.min_lat, region.max_lat, resolution)
         lons = np.arange(region.min_lon, region.max_lon, resolution)

@@ -67,13 +67,16 @@ def main():
 
     with st.sidebar:
         st.header("📍 Región")
+        # Define Regions as Macros areas (large coverage ~4x4 degrees or more)
+        # Mungia Center: 43.3, -2.7. 
+        # Box: Lat 41.3-45.3, Lon -4.7 to -0.7 covers huge part of N.Spain/Bay of Biscay
         region_options = {
-            "Mungia (Bizkaia)": (43.25, 43.45, -2.85, -2.65),
-            "Madrid": (40.0, 40.8, -4.2, -3.3),
-            "Barcelona": (41.0, 41.8, 1.5, 2.5),
-            "Galicia": (42.0, 43.5, -9.0, -7.0),
+            "Norte (Mungia/Euskadi)": (41.5, 45.0, -5.0, -0.5),
+            "Centro (Madrid)": (38.0, 42.0, -6.0, -1.0),
+            "Este (Barcelona/Cat)": (39.5, 43.5, -1.0, 5.0),
+            "Noroeste (Galicia)": (41.0, 44.5, -10.0, -6.0),
         }
-        # Default to Mungia as requested
+        # Default to Mungia/Norte
         selected_region_name = st.selectbox("Seleccionar Zona", list(region_options.keys()), index=0)
         
         # Custom Coordinates Input
@@ -87,8 +90,8 @@ def main():
                 parts = [float(p.strip()) for p in custom_coords.split(',')]
                 if len(parts) == 2:
                     c_lat, c_lon = parts
-                    # Create a standard 0.5 degree window around the point
-                    delta = 0.25 # +/- 0.25 deg ~= 50km box
+                    # Create a MACRO window (approx 400x400km) to ensure "full map" feel
+                    delta = 2.0 # +/- 2.0 deg = 4.0 deg span
                     min_lat, max_lat = c_lat - delta, c_lat + delta
                     min_lon, max_lon = c_lon - delta, c_lon + delta
                     st.toast(f"Usando coordenadas personalizadas: {c_lat}, {c_lon}", icon="🎯")
