@@ -496,6 +496,7 @@ def main():
         supabase = get_supabase()
         
         path_to_render = None
+        radar_palette = ["#00000000", "#7CFC00", "#32CD32", "#FFFF00", "#FF8C00", "#FF0000"]
         
         if show_precip:
              path_to_render = get_or_upload_layer(
@@ -519,7 +520,6 @@ def main():
     )
     m.add_basemap("CARTODB_POSITRON")
     
-    radar_palette = ["#00000000", "#7CFC00", "#32CD32", "#FFFF00", "#FF8C00", "#FF0000"]
     map_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
     if path_to_render:
