@@ -457,6 +457,7 @@ def main():
             value=max_hist,
             format="DD/MM HH:mm",
             key="slider_history",
+            step=timedelta(hours=4),
             label_visibility="collapsed" # Compact
         )
         if st.session_state.slider_history != max_hist: # Simple heuristic: if user moved it
