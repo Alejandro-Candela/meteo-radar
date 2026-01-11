@@ -19,43 +19,38 @@ class MeteorologicalFacade:
         self, 
         region: BoundingBox, 
         time_window: TimeRange,
-        high_resolution: bool = True
+        resolution: float = 0.01
     ) -> xr.Dataset:
         """
         Devuelve el pronóstico futuro interpolado.
         """
         raw_ds = self.provider.get_forecast(region, time_window)
-        return self._process_dataset(raw_ds, high_resolution)
+        return self._process_dataset(raw_ds, resolution)
 
     def get_history_view(
         self, 
         region: BoundingBox, 
         time_window: TimeRange,
-        high_resolution: bool = True
+        resolution: float = 0.01
     ) -> xr.Dataset:
         """
         Devuelve el histórico interpolado.
         """
         # En el adapter usamos get_history (que actualmente reusa _fetch_openmeteo)
-        # Nota: WeatherDataProvider (Interface) necesita el update tambien, o usamos cast.
-        # Por ahora asumimos que el provider tiene get_history si es OpenMeteo.
         if hasattr(self.provider, 'get_history'):
             raw_ds = self.provider.get_history(region, time_window)
         else:
             # Fallback
             raw_ds = self.provider.get_forecast(region, time_window)
             
-        return self._process_dataset(raw_ds, high_resolution)
+        return self._process_dataset(raw_ds, resolution)
 
-    def _process_dataset(self, raw_ds: xr.Dataset, high_resolution: bool) -> xr.Dataset:
-        if not high_resolution:
-            return raw_ds
-            
+    def _process_dataset(self, raw_ds: xr.Dataset, resolution: float) -> xr.Dataset:
         # 2. Aplicar interpolación (Dominio)
-        # 0.01 grados approx 1.1km latitud -> resolución tipo Radar
+        # target_resolution define la calidad final (0.01=High, 0.05=Low)
         interpolated_ds = InterpolationService.interpolate(
             raw_ds, 
-            target_resolution=0.01, 
+            target_resolution=resolution, 
             method="linear" 
         )
         

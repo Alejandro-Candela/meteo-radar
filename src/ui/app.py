@@ -29,7 +29,7 @@ def get_facade():
     return MeteorologicalFacade(provider=adapter)
 
 @st.cache_data(ttl=3600)
-def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon):
+def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     """
     Fetches both History (Past 10 days) and Forecast (Next 24h).
     Returns two separate datasets.
@@ -45,12 +45,12 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon):
     # 1. History Block (Last 10 days)
     history_start = now - timedelta(days=10)
     history_window = TimeRange(start=history_start, end=now)
-    ds_history = facade.get_history_view(bbox, history_window, high_resolution=True)
+    ds_history = facade.get_history_view(bbox, history_window, resolution=resolution)
     
     # 2. Forecast Block (Next 24h)
     forecast_end = now + timedelta(hours=24)
     forecast_window = TimeRange(start=now, end=forecast_end)
-    ds_forecast = facade.get_forecast_view(bbox, forecast_window, high_resolution=True)
+    ds_forecast = facade.get_forecast_view(bbox, forecast_window, resolution=resolution)
     
     return ds_history, ds_forecast
 
@@ -58,7 +58,100 @@ def create_geotiff(da: xr.DataArray, filename: str):
     da = da.rio.write_crs("EPSG:4326")
     da.rio.to_raster(filename)
 
+def inject_custom_css():
+    st.markdown("""
+        <style>
+        /* Compact Sliders */
+        .stSlider {
+            padding-top: 0rem !important;
+            padding-bottom: 0rem !important;
+        }
+        div[data-testid="stSliderTickBar"] {
+            display: none;
+        }
+        
+        /* Legend Table Styles */
+        .sidebar-legend {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .legend-gradient {
+            height: 10px;
+            width: 100%;
+            background: linear-gradient(to right, 
+                rgba(0,0,0,0), 
+                #7CFC00, 
+                #32CD32, 
+                #FFFF00, 
+                #FF8C00, 
+                #FF0000
+            );
+            border-radius: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #ccc;
+        }
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            color: gray;
+            font-size: 0.8em;
+        }
+        
+        /* Blue Slider for Prediction (Targeting by Label content) */
+        /* Use :has() to find the slider container that has the specific label */
+        div.stSlider:has(div[aria-label="Seleccionar hora futura"]) {
+            --streamlit-theme-primary-color: #00BFFF !important;
+            --primary-color: #00BFFF !important;
+        }
+        
+        /* Force track and thumb colors for this specific slider */
+        div.stSlider:has(div[aria-label="Seleccionar hora futura"]) div[data-testid="stSliderTickBar"] + div,
+        div.stSlider:has(div[aria-label="Seleccionar hora futura"]) div[role="slider"] {
+            background-color: #00BFFF !important;
+        }
+        
+        /* Also target the button "Ver Predicción" */
+        div.stButton button:has(div:contains("Ver Predicción")), /* Pseudo-selector :contains not in Std CSS, use logic */
+        div.stButton button p:contains("Ver Predicción") { /* Try general sibling or just nth-of-type for button if possible */
+             /* :contains is NOT valid CSS. We must use position or JS. Using nth-of-type for button */
+        }
+        
+        /* Reliable Button Targeting via Column Index */
+        div[data-testid="column"]:nth-of-type(2) div.stButton button {
+            border-color: #00BFFF !important;
+            color: #00BFFF !important;
+        }
+        div[data-testid="column"]:nth-of-type(2) div.stButton button:hover {
+            border-color: #00BFFF !important;
+            color: #00BFFF !important;
+            background-color: rgba(0, 191, 255, 0.1) !important;
+        }
+        div[data-testid="column"]:nth-of-type(2) div.stButton button:focus:not(:active) {
+            border-color: #00BFFF !important;
+            color: #00BFFF !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+def get_radar_legend_html():
+    return """
+        <div class="sidebar-legend">
+            <div style="font-weight: bold; margin-bottom: 5px;">🌧️ Intensidad (mm/h)</div>
+            <div class="legend-gradient"></div>
+            <div class="legend-labels">
+                <span>0</span>
+                <span>2</span>
+                <span>5</span>
+                <span>10+</span>
+            </div>
+        </div>
+    """
+
 def main():
+    inject_custom_css()
     st.title("📡 Meteo Radar - Dual Timeline")
     
     # --- Sidebar State Management ---
@@ -107,87 +200,103 @@ def main():
         if st.button("🔄 Recargar Datos"):
             st.cache_data.clear()
             st.rerun()
+            
+        st.divider()
+        resolution_options = {
+            "Alta (1.1 km/px)": 0.01,
+            "Media (2.2 km/px)": 0.02,
+            "Baja (5.5 km/px)": 0.05
+        }
+        selected_res_name = st.selectbox("Calidad de Imagen", list(resolution_options.keys()), index=0)
+        selected_resolution = resolution_options[selected_res_name]
+        
+        # --- Legend in Sidebar ---
+        st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
 
     # --- Data Loading ---
     with st.spinner("Sincronizando modelos meteorológicos..."):
-        ds_history, ds_forecast = fetch_data_blocks(min_lat, max_lat, min_lon, max_lon)
+        ds_history, ds_forecast = fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, selected_resolution)
 
     if ds_history is None or ds_forecast is None:
         st.error("Error cargando datasets")
         return
 
-    # --- Dual Sliders Logic ---
-    st.markdown("### 1. Análisis Histórico (Últimos 10 Días)")
+    # --- Time Control (Top Layout) ---
+    current_time_utc = datetime.now(timezone.utc)
     
-    # Prepare History Slider
+    # Prepare Timelines
     hist_times = pd.to_datetime(ds_history.time.values)
-    # Convert to pydatetime and ensure UTC awareness for slider comparison if needed, 
-    # but Streamlit slider usually likes native python datetimes.
-    # Xarray times are np.datetime64.
     min_hist = hist_times[0].to_pydatetime()
     max_hist = hist_times[-1].to_pydatetime()
     
+    fore_times = pd.to_datetime(ds_forecast.time.values)
+    min_fore = fore_times[0].to_pydatetime()
+    max_fore = fore_times[-1].to_pydatetime()
+
     # Use session state to track which slider is "Active"
     if 'active_mode' not in st.session_state:
         st.session_state['active_mode'] = 'forecast' # Default to forecast
 
-    # History Slider
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    # Dual Column Layout above Map
+    # Use columns to put them side-by-side
+    slider_col1, slider_col2 = st.columns(2)
+    
+    with slider_col1:
+        st.markdown("##### 📜 Histórico")
         sel_hist = st.slider(
-            "Retroceder en el tiempo",
+            "Seleccionar hora pasada",
             min_value=min_hist,
             max_value=max_hist,
             value=max_hist,
             format="DD/MM HH:mm",
-            key="slider_history"
+            key="slider_history",
+            label_visibility="collapsed" # Compact
         )
-    with col2:
-        if st.button("Ver Histórico", key="btn_hist"):
-            st.session_state['active_mode'] = 'history'
-            st.session_state.map_refresh_trigger += 1
+        if st.session_state.slider_history != max_hist: # Simple heuristic: if user moved it
+             st.session_state['active_mode'] = 'history'
+        # Or explicit button? User asked for just sliders. Let's infer mode from last changed or keep button?
+        # User said: "historico a la izquierda, seguido de prediccion a la derecha"
+        # Let's keep the logic simple: The slider value drives the map. 
+        # But we need to know WHICH one to show. 
+        # For now, let's keep the Buttons below or integrated? 
+        # User didn't mention buttons, just sliders. I will auto-detect interaction if possible.
+        # But Streamlit doesn't give "event source" easily.
+        # I will add small 'Activar' buttons or just assume if one is changed it becomes active.
+        if st.button("Ver Histórico", key="btn_activate_hist", use_container_width=True):
+             st.session_state['active_mode'] = 'history'
 
-    st.markdown("### 2. Predicción (Próximas 24 Horas)")
-    
-    # Prepare Forecast Slider
-    fore_times = pd.to_datetime(ds_forecast.time.values)
-    min_fore = fore_times[0].to_pydatetime()
-    max_fore = fore_times[-1].to_pydatetime()
-    
-    col3, col4 = st.columns([3, 1])
-    with col3:
+    with slider_col2:
+        st.markdown("##### 🔮 Predicción")
         sel_fore = st.slider(
-            "Futuro (+24h)",
+            "Seleccionar hora futura",
             min_value=min_fore,
             max_value=max_fore,
             value=min_fore,
             format="DD/MM HH:mm",
-            key="slider_forecast"
+            key="slider_forecast",
+            label_visibility="collapsed"
         )
-    with col4:
-        if st.button("Ver Predicción", key="btn_fore"):
-            st.session_state['active_mode'] = 'forecast'
-            st.session_state.map_refresh_trigger += 1
+        if st.button("Ver Predicción", key="btn_activate_fore", use_container_width=True, type="primary"):
+             st.session_state['active_mode'] = 'forecast'
 
     # --- Active Logic ---
     active_ds = None
     active_time = None
     
-    # Determine what to show based on what slider was last interacted with or button pressed
-    # Simple heuristic: If active_mode is history, use hist slider value.
-    
     if st.session_state['active_mode'] == 'history':
         active_ds = ds_history
-        # Ensure TZ
         if sel_hist.tzinfo is None: sel_hist = sel_hist.replace(tzinfo=timezone.utc)
         active_time = sel_hist
-        st.info(f"📜 Modo: **HISTÓRICO** | Visualizando: {active_time.strftime('%Y-%m-%d %H:%M')}")
-        
+        start_msg = "📜 Visualizando Histórico"
     else:
         active_ds = ds_forecast
         if sel_fore.tzinfo is None: sel_fore = sel_fore.replace(tzinfo=timezone.utc)
         active_time = sel_fore
-        st.success(f"🔮 Modo: **PREDICCIÓN** | Visualizando: {active_time.strftime('%Y-%m-%d %H:%M')}")
+        start_msg = "🔮 Visualizando Predicción"
+
+    # Info Bar
+    col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
+    col_info1.info(f"{start_msg}: **{active_time.strftime('%d/%m/%Y %H:%M')} UTC**")
 
     # --- Map Rendering ---
     # Select Data
@@ -197,39 +306,26 @@ def main():
         st.warning("Hora fuera de rango para el dataset seleccionado.")
         return
 
-    # Calculate Stats for Feedback
+    # Calculate Stats
     max_precip = layer_data.max().item()
     mean_precip = layer_data.mean().item()
-    
-    col_stat1, col_stat2 = st.columns(2)
-    col_stat1.metric("Lluvia Máxima (mm/h)", f"{max_precip:.2f}")
-    col_stat2.metric("Promedio Zona", f"{mean_precip:.2f}")
-
-    if max_precip == 0:
-        st.caption("🌤️ No se detecta lluvia en este momento para esta zona.")
+    col_info2.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
+    col_info3.metric("Promedio", f"{mean_precip:.2f}")
 
     # Generate TIFF
     tmp_dir = tempfile.mkdtemp()
     tmp_path = os.path.join(tmp_dir, "active_radar.tif")
     create_geotiff(layer_data, tmp_path)
 
-    # Force Leafmap refresh by using a dynamic key or just re-rendering
-    # Leafmap in streamlit is a bit sticky.
-    # We will use the 'key' argument in to_streamlit if available, or recreate the object.
-    
+    # Map
     m = leafmap.Map(
         center=[(max_lat+min_lat)/2, (max_lon+min_lon)/2],
-        zoom=10, # Zoom in for local view
+        zoom=7, # Macro zoom
         draw_control=False,
         measure_control=False,
     )
-    m.add_basemap("CARTODB_POSITRON") # Light map to match reference better (usually radar overlay looks better on light)
+    m.add_basemap("CARTODB_POSITRON")
     
-    # Custom Colormap for Radar (Standard Ref)
-    # 0 -> Transparent
-    # Low -> Light Green
-    # Med -> Dark Green
-    # High -> Yellow/Red
     radar_palette = ["#00000000", "#7CFC00", "#32CD32", "#FFFF00", "#FF8C00", "#FF0000"]
     
     m.add_raster(
@@ -242,15 +338,17 @@ def main():
         vmax=max(5.0, max_precip) 
     )
     
-    # Display
-    # Using a unique key based on time forces full re-mount of the map component
-    # This is heavy but ensures the image updates.
-    unique_map_key = f"map_{st.session_state['active_mode']}_{active_time.isoformat()}"
-    m.to_streamlit(height=600, key=unique_map_key)
+    # Display Map - Static Key to prevent full reload
+    # We use a static key 'main_map'. Streamlit might cache the iframe.
+    # If the iframe is cached, it might NOT update the content inside.
+    # NOTE: leafmap.to_streamlit writes HTML to a file/string. 
+    # If we call it again, strict re-render is needed for the new HTML to show.
+    # If we use a static key, Streamlit replaces the component if the args (html) changed?
+    # Actually, the 'key' in st.components.v1.html is for state preservation.
+    m.to_streamlit(height=600) 
     
-    # Cleanup (Delayed to ensure serve happens)
-    # In prod, use a dedicated temp manager. For now, we leave it or rely on OS cleanup
-    # shutil.rmtree(tmp_dir) # Removing immediately might break localtileserver serving
+    # Cleanup
+    # shutil.rmtree(tmp_dir) 
 
 if __name__ == "__main__":
     main()
