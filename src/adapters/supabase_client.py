@@ -11,11 +11,21 @@ load_dotenv(env_path)
 
 class SupabaseClient:
     def __init__(self):
+        # Try finding keys in Env, then st.secrets
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_KEY")
-        print(f"[DEBUG] Client Init: URL={url}, KEY={key}")
+
         if not url or not key:
-             raise ValueError(f"Supabase Keys not found in environment. URL={url}, KEY={key}")
+            try:
+                import streamlit as st
+                url = st.secrets["SUPABASE_URL"]
+                key = st.secrets["SUPABASE_KEY"]
+            except Exception:
+                pass
+        
+        if not url or not key:
+             raise ValueError("Supabase Keys not found in environment or secrets.")
+        
         self.client: Client = create_client(url, key)
         self.bucket = "radar_cache"
         self.table = "cache_entries"
