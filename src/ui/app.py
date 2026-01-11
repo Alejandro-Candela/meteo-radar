@@ -270,6 +270,14 @@ def main():
         st.session_state.map_refresh_trigger = 0
 
     with st.sidebar:
+        # Status Indicator
+        supabase = get_supabase()
+        if supabase:
+            st.success("✅ Cloud Cache: Conectado")
+        else:
+            st.error("❌ Cloud Cache: Off (Local Mode)")
+            st.caption("Faltan Secretos de Supabase. La app en la nube puede no mostrar capas.")
+        
         st.header("📍 Región")
         # Define Regions as Macros areas (large coverage ~4x4 degrees or more)
         # Mungia Center: 43.3, -2.7. 
