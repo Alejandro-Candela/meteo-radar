@@ -64,37 +64,75 @@ def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     
     return ds_history, ds_forecast
 
-def create_geotiff(da: xr.DataArray, filename: str):
-    da = da.rio.write_crs("EPSG:4326")
-    da.rio.to_raster(filename)
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
-def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime) -> str:
+def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vmin=None, vmax=None):
+    """
+    Saves the data array as a colored PNG image without geospatial metadata embedded.
+    """
+    # Normalize data
+    data = da.values
+    if vmin is None: vmin = np.nanmin(data)
+    if vmax is None: vmax = np.nanmax(data)
+    
+    # Handle NaN for transparency
+    # Create matplotlib Normalize
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    
+    # Choose colormap
+    if isinstance(colormap, list):
+         cmap = mcolors.LinearSegmentedColormap.from_list("custom", colormap)
+    else:
+         cmap = plt.get_cmap(colormap)
+         
+    # Apply colormap (returns RGBA)
+    colored_data = cmap(norm(data))
+    
+    # Set Alpha for NaNs
+    # xarray usually returns float, assumes NaNs are np.nan
+    mask = np.isnan(data)
+    colored_data[mask] = [0, 0, 0, 0] # Transparent
+    
+    # Save using imsave (origin='upper' matches lat descending)
+    plt.imsave(filename, colored_data, origin='upper', format='png')
+
+
+def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime, colormap='viridis', vmin=None, vmax=None) -> str:
+    """
+    Returns a URL (Supabase PNG) or Local Path (PNG).
+    """
     if client is None:
-        tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-        create_geotiff(da, tmp.name)
+        # Fallback to local PNG (though cloud won't render it)
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        generate_colored_png(da, tmp.name, colormap, vmin, vmax)
         return tmp.name
-
-    # 1. Try Cache
-    url = client.get_tiff_url(bbox, variable, timestamp)
+        
+    # 1. Check Supabase (PNG)
+    url = client.get_layer_url(bbox, variable, timestamp, ext=".png")
     if url:
         return url
+        
+    # 2. Not found, create local PNG
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp.close() # Close to allow writing
     
-    # 2. Cache Miss: Generate & Upload
-    fd, local_path = tempfile.mkstemp(suffix=".tif")
-    os.close(fd)
-    create_geotiff(da, local_path)
-    
-    # Upload (Fire and forget ideal, but sync for now)
-    uploaded_url = client.upload_tiff(local_path, bbox, variable, timestamp)
-    
-    if uploaded_url:
-        try:
-             os.remove(local_path) # Cleanup if uploaded
-        except:
-             pass
-        return uploaded_url
-    else:
-        return local_path
+    try:
+        generate_colored_png(da, tmp.name, colormap, vmin, vmax)
+        
+        # 3. Upload PNG
+        url = client.upload_file(tmp.name, bbox, variable, timestamp, ext=".png", mime="image/png")
+        if url:
+            try:
+                os.remove(tmp.name)
+            except:
+                pass
+            return url
+        return tmp.name
+    except Exception as e:
+        print(f"Error generating/uploading PNG: {e}")
+        return tmp.name
 
 def inject_custom_css():
     st.markdown("""
@@ -460,7 +498,10 @@ def main():
         path_to_render = None
         
         if show_precip:
-             path_to_render = get_or_upload_layer(supabase, layer_data, "precipitation", bbox_tuple, active_time)
+             path_to_render = get_or_upload_layer(
+                 supabase, layer_data, "precipitation", bbox_tuple, active_time,
+                 colormap=radar_palette, vmin=0, vmax=max(5.0, max_precip)
+             )
         else:
              # Just create temp for others logic to hold if needed?
              # No, if hidden we don't render. 
@@ -479,17 +520,15 @@ def main():
     m.add_basemap("CARTODB_POSITRON")
     
     radar_palette = ["#00000000", "#7CFC00", "#32CD32", "#FFFF00", "#FF8C00", "#FF0000"]
-    
+    map_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+
     if path_to_render:
-        m.add_raster(
-            path_to_render, 
-            layer_name="Radar Precipitación", 
-            colormap=radar_palette, 
-            opacity=0.6,
-            nodata=np.nan,
-            vmin=0,
-            vmax=max(5.0, max_precip) 
-        )
+         m.add_image(
+             path_to_render,
+             bounds=map_bounds,
+             layer_name="Radar Precipitación",
+             opacity=0.6
+         )
     
     # --- New Layers Rendering ---
     
@@ -497,19 +536,17 @@ def main():
     if show_temp and 'temperature' in active_ds:
         try:
             temp_data = active_ds['temperature'].sel(time=active_time, method="nearest")
-            t_path = get_or_upload_layer(supabase, temp_data, "temperature", bbox_tuple, active_time)
-            
-            # Auto-scale for temp
             t_min = temp_data.min().item()
             t_max = temp_data.max().item()
             
-            m.add_raster(
+            t_path = get_or_upload_layer(supabase, temp_data, "temperature", bbox_tuple, active_time, 
+                                        colormap="RdYlBu_r", vmin=t_min, vmax=t_max)
+            
+            m.add_image(
                 t_path,
+                bounds=map_bounds,
                 layer_name="Temperatura (ºC)",
-                colormap="RdYlBu_r",
-                opacity=0.5,
-                vmin=t_min,
-                vmax=t_max
+                opacity=0.5
             )
         except Exception as e:
             # st.error(f"Temp Error: {e}") 
@@ -519,18 +556,17 @@ def main():
     if show_pressure and 'pressure' in active_ds:
         try:
             press_data = active_ds['pressure'].sel(time=active_time, method="nearest")
-            p_path = get_or_upload_layer(supabase, press_data, "pressure", bbox_tuple, active_time)
-            
             p_min = press_data.min().item()
             p_max = press_data.max().item()
             
-            m.add_raster(
+            p_path = get_or_upload_layer(supabase, press_data, "pressure", bbox_tuple, active_time,
+                                        colormap="viridis", vmin=p_min, vmax=p_max)
+            
+            m.add_image(
                 p_path,
+                bounds=map_bounds,
                 layer_name="Presión (hPa)",
-                colormap="viridis",
-                opacity=0.5,
-                vmin=p_min,
-                vmax=p_max
+                opacity=0.5
             )
         except Exception:
             pass
@@ -539,17 +575,16 @@ def main():
     if show_wind and 'wind_speed' in active_ds:
         try:
             wind_data = active_ds['wind_speed'].sel(time=active_time, method="nearest")
-            w_path = get_or_upload_layer(supabase, wind_data, "wind_speed", bbox_tuple, active_time)
-            
             w_max = wind_data.max().item()
             
-            m.add_raster(
+            w_path = get_or_upload_layer(supabase, wind_data, "wind_speed", bbox_tuple, active_time,
+                                        colormap="YlOrRd", vmin=0, vmax=max(10.0, w_max))
+            
+            m.add_image(
                 w_path,
+                bounds=map_bounds,
                 layer_name="Viento (km/h)",
-                colormap="YlOrRd",
-                opacity=0.6,
-                vmin=0,
-                vmax=max(10.0, w_max)
+                opacity=0.6
             )
         except Exception:
             pass
