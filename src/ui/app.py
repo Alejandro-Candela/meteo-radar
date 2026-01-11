@@ -1,5 +1,6 @@
 import streamlit as st
 import leafmap.foliumap as leafmap
+import folium
 import tempfile
 import os
 import shutil
@@ -523,12 +524,15 @@ def main():
     map_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
     if path_to_render:
-         m.add_image(
-             path_to_render,
+         folium.raster_layers.ImageOverlay(
+             image=path_to_render,
              bounds=map_bounds,
-             layer_name="Radar Precipitación",
-             opacity=0.6
-         )
+             name="Radar Precipitación",
+             opacity=0.6,
+             interactive=False,
+             cross_origin=False,
+             zindex=1
+         ).add_to(m)
     
     # --- New Layers Rendering ---
     
@@ -542,12 +546,15 @@ def main():
             t_path = get_or_upload_layer(supabase, temp_data, "temperature", bbox_tuple, active_time, 
                                         colormap="RdYlBu_r", vmin=t_min, vmax=t_max)
             
-            m.add_image(
-                t_path,
+            folium.raster_layers.ImageOverlay(
+                image=t_path,
                 bounds=map_bounds,
-                layer_name="Temperatura (ºC)",
-                opacity=0.5
-            )
+                name="Temperatura (ºC)",
+                opacity=0.5,
+                interactive=False,
+                cross_origin=False,
+                zindex=2
+            ).add_to(m)
         except Exception as e:
             # st.error(f"Temp Error: {e}") 
             pass
@@ -562,12 +569,15 @@ def main():
             p_path = get_or_upload_layer(supabase, press_data, "pressure", bbox_tuple, active_time,
                                         colormap="viridis", vmin=p_min, vmax=p_max)
             
-            m.add_image(
-                p_path,
+            folium.raster_layers.ImageOverlay(
+                image=p_path,
                 bounds=map_bounds,
-                layer_name="Presión (hPa)",
-                opacity=0.5
-            )
+                name="Presión (hPa)",
+                opacity=0.5,
+                interactive=False,
+                cross_origin=False,
+                zindex=3
+            ).add_to(m)
         except Exception:
             pass
 
@@ -580,12 +590,15 @@ def main():
             w_path = get_or_upload_layer(supabase, wind_data, "wind_speed", bbox_tuple, active_time,
                                         colormap="YlOrRd", vmin=0, vmax=max(10.0, w_max))
             
-            m.add_image(
-                w_path,
+            folium.raster_layers.ImageOverlay(
+                image=w_path,
                 bounds=map_bounds,
-                layer_name="Viento (km/h)",
-                opacity=0.6
-            )
+                name="Viento (km/h)",
+                opacity=0.6,
+                interactive=False,
+                cross_origin=False,
+                zindex=4
+            ).add_to(m)
         except Exception:
             pass
     
