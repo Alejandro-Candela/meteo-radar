@@ -29,11 +29,12 @@ def get_facade():
     adapter = OpenMeteoAdapter()
     return MeteorologicalFacade(provider=adapter)
 
-@st.cache_data(ttl=3600)
+@st.cache_resource(ttl=3600, show_spinner=False)
 def fetch_data_blocks(min_lat, max_lat, min_lon, max_lon, resolution):
     """
-    Fetches both History (Past 10 days) and Forecast (Next 24h).
+    Fetches both History (Past 15 days) and Forecast (Next 15 days).
     Returns two separate datasets.
+    Uses cache_resource to avoid pickling large Xarray datasets.
     """
     facade = get_facade()
     bbox = BoundingBox(
