@@ -9,7 +9,7 @@ import pandas as pd
 root_path = Path(__file__).parent.parent.parent
 sys.path.append(str(root_path))
 
-from src.ui.utils.helpers import inject_custom_css
+from src.ui.utils.helpers import inject_custom_css, get_supabase
 from src.ui.utils.data_loader import fetch_data_blocks
 from src.ui.components.sidebar import render_sidebar
 from src.ui.components.map_view import display_map
@@ -44,7 +44,7 @@ def main():
     
     # --- State Management (Defaults) ---
     if 'active_mode' not in st.session_state:
-        st.session_state['active_mode'] = 'forecast' # Default to prediction
+        st.session_state['active_mode'] = 'history' # Default to history as per user req
         
     # --- Timeline Limits ---
     min_hist, max_hist = datetime.now(timezone.utc), datetime.now(timezone.utc)
@@ -58,7 +58,29 @@ def main():
         times = ds_forecast.time.values
         min_fore = pd_to_datetime(times.min())
         max_fore = pd_to_datetime(times.max())
-        
+
+    # --- Shadow State Initialization ---
+    if 'internal_hist' not in st.session_state:
+        st.session_state['internal_hist'] = min_hist # Start from beginning
+    # Ensure internal state is within bounds (if data reloaded)
+    # Ensure internal state is within bounds (if data reloaded)
+    if st.session_state['internal_hist'] < min_hist or st.session_state['internal_hist'] > max_hist:
+        st.session_state['internal_hist'] = max_hist
+
+    if 'internal_fore' not in st.session_state:
+        st.session_state['internal_fore'] = min_fore
+    if st.session_state['internal_fore'] < min_fore or st.session_state['internal_fore'] > max_fore:
+        st.session_state['internal_fore'] = min_fore
+
+    # Callbacks
+    def update_hist():
+        st.session_state['internal_hist'] = st.session_state.slider_history
+        st.session_state['active_mode'] = 'history'
+    
+    def update_fore():
+        st.session_state['internal_fore'] = st.session_state.slider_forecast
+        st.session_state['active_mode'] = 'forecast'
+
     # --- Dual Column Sliders ---
     slider_col1, slider_col2 = st.columns(2)
     
@@ -68,16 +90,13 @@ def main():
             "Seleccionar hora pasada",
             min_value=min_hist,
             max_value=max_hist,
-            value=max_hist,
+            value=st.session_state['internal_hist'],
             format="DD/MM HH:mm",
             key="slider_history",
             step=timedelta(hours=2),
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            on_change=update_hist
         )
-        # Activate on interaction check (Heuristic)
-        if st.session_state.slider_history != max_hist:
-             st.session_state['active_mode'] = 'history'
-             
         if st.button("Ver Histórico", key="btn_activate_hist", use_container_width=True):
              st.session_state['active_mode'] = 'history'
 
@@ -87,10 +106,11 @@ def main():
             "Seleccionar hora futura",
             min_value=min_fore,
             max_value=max_fore,
-            value=min_fore,
+            value=st.session_state['internal_fore'],
             format="DD/MM HH:mm",
             key="slider_forecast",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            on_change=update_fore
         )
         if st.button("Ver Predicción", key="btn_activate_fore", use_container_width=True, type="primary"):
              st.session_state['active_mode'] = 'forecast'
@@ -102,39 +122,53 @@ def main():
     
     if st.session_state['active_mode'] == 'history':
         active_ds = ds_history
-        if sel_hist.tzinfo is None: sel_hist = sel_hist.replace(tzinfo=timezone.utc)
-        active_time = sel_hist
-        start_msg = "📜 Visualizando Histórico"
+        active_time = st.session_state['internal_hist']
+        if active_time.tzinfo is None: active_time = active_time.replace(tzinfo=timezone.utc)
+        start_msg = f"📜 Histórico: {active_time.strftime('%H:%M')}"
     else:
         active_ds = ds_forecast
-        if sel_fore.tzinfo is None: sel_fore = sel_fore.replace(tzinfo=timezone.utc)
-        active_time = sel_fore
-        start_msg = "🔮 Visualizando Predicción"
+        active_time = st.session_state['internal_fore']
+        if active_time.tzinfo is None: active_time = active_time.replace(tzinfo=timezone.utc)
+        start_msg = f"🔮 Predicción: {active_time.strftime('%H:%M')}"
+
+    st.info(f"{start_msg} | Cargando datos...", icon="⏳")
+
+    # Render Map and hold result
+    supabase_client = get_supabase()
+    
+    display_map(
+        active_ds, 
+        active_time,
+        config['bbox'],
+        config['layers'],
+        supabase_client
+    )
 
     # --- Animation Logic ---
     if config['auto_play']:
+        # Block execution to let user see the map
+        # time.sleep happens ON SERVER. 
+        # We assume client renders in parallel.
         time.sleep(config['play_speed'])
+        
         # Increment logic
         current_time = active_time
+        
         if st.session_state['active_mode'] == 'history':
              next_time = current_time + timedelta(hours=2)
              if next_time > max_hist:
-                 # Loop or switch? Loop history
                  next_time = min_hist
-             # Update session state for slider to pick up next run
-             # Getting Key Error if we try to set widget directly possibly?
-             # No, standard way is update session state key.
-             # st.session_state['slider_history'] = next_time # This might cause loop issues with widget
-             st.warning("Animación en refactorización. Usa el slider manual por ahora.")
+             
+             st.session_state['internal_hist'] = next_time 
+             
         else:
              next_time = current_time + timedelta(hours=1)
              if next_time > max_fore:
                  next_time = min_fore
-             # st.session_state['slider_forecast'] = next_time
-             st.warning("Animación en refactorización.")
+             
+             st.session_state['internal_fore'] = next_time
         
         st.rerun()
-
     # --- Info Bar ---
     col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
     col_info1.info(f"{start_msg}: **{active_time.strftime('%d/%m/%Y %H:%M')} UTC**")
@@ -151,14 +185,7 @@ def main():
              col_info2.metric("Lluvia Máxima", "N/A")
              col_info3.metric("Promedio", "N/A")
 
-    # --- Map Display ---
-    display_map(
-        active_ds, 
-        active_time, 
-        config['bbox'], 
-        config['layers'], 
-        supabase_client=config['supabase']
-    )
+    # --- End of Main ---
 
 def pd_to_datetime(pd_dt):
     """Helper to convert numpy/pandas datetime to py datetime with utc"""
