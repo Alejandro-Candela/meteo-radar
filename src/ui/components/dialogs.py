@@ -77,12 +77,10 @@ def show_export_dialog(min_lat, max_lat, min_lon, max_lon, resolution):
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-@st.dialog("Leyenda de Mapas")
+@st.dialog("Leyenda de Capas")
 def show_legend_dialog():
     st.markdown("### 🌧️ Precipitación")
     st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
-    
-    st.divider()
     
     st.markdown("### 🌡️ Temperatura (ºC)")
     st.markdown("""
