@@ -366,6 +366,49 @@ def show_export_dialog(min_lat, max_lat, min_lon, max_lon, resolution):
                 except Exception as e:
                     st.error(f"Error: {e}")
 
+@st.dialog("Leyenda de Mapas")
+def show_legend_dialog():
+    st.markdown("### 🌧️ Precipitación")
+    st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
+    
+    st.divider()
+    
+    st.markdown("### 🌡️ Temperatura (ºC)")
+    st.markdown("""
+    <div style="display: flex; align-items: center;">
+      <span style='margin-right:8px'>Frío</span>
+      <div style='flex-grow:1; height:20px; background: linear-gradient(to right, #313695, #4575b4, #74add1, #abd9e9, #e0f3f8, #ffffbf, #fee090, #fdae61, #f46d43, #d73027, #a50026); border-radius: 4px;'></div>
+      <span style='margin-left:8px'>Calor</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: gray;">
+        <span>-20ºC</span><span>0ºC</span><span>20ºC</span><span>40ºC</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### ⏲️ Presión (hPa)")
+    st.markdown("""
+    <div style="display: flex; align-items: center;">
+      <span style='margin-right:8px'>Baja</span>
+      <div style='flex-grow:1; height:20px; background: linear-gradient(to right, #440154, #3b528b, #21908d, #5dc863, #fde725); border-radius: 4px;'></div>
+      <span style='margin-left:8px'>Alta</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: gray;">
+        <span>980</span><span>1000</span><span>1020</span><span>1040</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 💨 Viento (km/h)")
+    st.markdown("""
+    <div style="display: flex; align-items: center;">
+      <span style='margin-right:8px'>Calma</span>
+      <div style='flex-grow:1; height:20px; background: linear-gradient(to right, #ffffb2, #fecc5c, #fd8d3c, #f03b20, #bd0026); border-radius: 4px;'></div>
+      <span style='margin-left:8px'>Fuerte</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: gray;">
+        <span>0</span><span>20</span><span>50</span><span>100+</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 def main():
     inject_custom_css()
     st.title("📡 Meteo Radar - Dual Timeline")
@@ -435,7 +478,8 @@ def main():
         selected_resolution = resolution_options[selected_res_name]
         
         # --- Legend in Sidebar ---
-        st.markdown(get_radar_legend_html(), unsafe_allow_html=True)
+        if st.button("📝 Ver Leyenda", use_container_width=True):
+             show_legend_dialog()
         
         # --- Layer Control ---
         st.divider()
