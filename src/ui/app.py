@@ -181,10 +181,16 @@ def main():
             
             if active_ds:
                 try:
-                    # Helper to get scalar value safely
+                    # Calculate Center of the current View (BBOX)
+                    # config['bbox'] = (min_lat, max_lat, min_lon, max_lon)
+                    c_lat = (config['bbox'][0] + config['bbox'][1]) / 2
+                    c_lon = (config['bbox'][2] + config['bbox'][3]) / 2
+
+                    # Helper to get scalar value safely at the CENTER point
                     def get_val(var_name, method="nearest"):
                         if var_name in active_ds:
-                            val = active_ds[var_name].sel(time=active_time, method=method).mean().item()
+                            # Use 'x' (lon) and 'y' (lat) as defined in OpenMeteoAdapter
+                            val = active_ds[var_name].sel(x=c_lon, y=c_lat, time=active_time, method=method).item()
                             return val
                         return None
                         
@@ -192,13 +198,19 @@ def main():
                         if val is None: return "N/A"
                         return f"{val:.{decimal}f}{unit}"
 
-                    # --- Fetching Values (Mean across view or specific point) ---
-                    # Currently fetching MEAN across the visible region for simplicity
-                    # ideally this should be "Point" value if user clicked, but "Mean" is good for region overview
-                    
+                    # --- Fetching Values (Point Specific) ---
                     temp = get_val('temperature')
                     app_temp = get_val('apparent_temp')
-                    precip = get_val('precipitation') # Mean precip might be low, MAX often better for precip
+                    
+                    # For Precip, point value is better for "Local" accuracy than mean.
+                    # User likely wants to know if it rains HERE.
+                    precip = get_val('precipitation') 
+                    # We keep "Max in Region" as a separate interesting stat? 
+                    # The user prompt specifically complained about "Madrid was 8 degrees (mean) vs 1 degree (actual)".
+                    # So "Lluvia Max" implies Regional Max. Let's keep one regional stat or rename it.
+                    # Current label is "Lluvia Max". I will keep it as Regional Max for context but add Point Precip.
+                    
+                    # REGIONAL Max for Precipitation (useful for context)
                     max_precip = active_ds['precipitation'].sel(time=active_time, method="nearest").max().item() if 'precipitation' in active_ds else 0
                     
                     humidity = get_val('humidity')
@@ -223,7 +235,7 @@ def main():
                     # Row 2: Conditions
                     st.markdown("**🌧️ Condiciones**")
                     c1, c2, c3 = st.columns(3)
-                    c1.markdown(f"<span style='font-size:0.8em; color:#666'>Lluvia Max</span><br>**{max_precip:.1f}** <span style='font-size:0.8em'>mm</span>", unsafe_allow_html=True)
+                    c1.markdown(f"<span style='font-size:0.8em; color:#666'>Lluvia</span><br>**{fmt(precip, ' mm')}**", unsafe_allow_html=True)
                     c2.markdown(f"<span style='font-size:0.8em; color:#666'>Humedad</span><br>**{fmt(humidity, '%', 0)}**", unsafe_allow_html=True)
                     c3.markdown(f"<span style='font-size:0.8em; color:#666'>Nubes</span><br>**{fmt(clouds, '%', 0)}**", unsafe_allow_html=True)
                     
