@@ -5,13 +5,15 @@ import tempfile
 import xarray as xr
 from datetime import datetime
 from src.ui.utils.helpers import get_or_upload_layer
+from src.adapters.aemet import AemetAdapter
 
 def display_map(
     active_ds: xr.Dataset, 
     active_time: datetime,
     bbox_config: tuple, # (min_lat, max_lat, min_lon, max_lon) from widgets
     layers_state: dict, # {'precip': True, 'temp': False, ...}
-    supabase_client=None
+    supabase_client=None,
+    aemet_key: str = None
 ):
     """
     Renders the map with active layers.
@@ -117,6 +119,28 @@ def display_map(
             ).add_to(m)
         except Exception:
             pass
+
+    # 5. AEMET Radar (Overlay)
+    if layers_state.get('aemet_radar', False) and aemet_key:
+        try:
+            adapter = AemetAdapter(aemet_key)
+            # Fetch Image URL
+            overlay_url = adapter.get_radar_composite_url()
+            # Fetch Bounds
+            overlay_bounds = adapter.national_bounds
+            
+            if overlay_url:
+                folium.raster_layers.ImageOverlay(
+                    image=overlay_url, 
+                    bounds=overlay_bounds, 
+                    name="AEMET Radar (Oficial)",
+                    opacity=0.7, 
+                    interactive=False, 
+                    cross_origin=True, 
+                    zindex=10 # Top Layer
+                ).add_to(m)
+        except Exception as e:
+            print(f"Error AEMET Layer: {e}")
 
     # Display - STATIC KEY to prevent blinking
     m.to_streamlit(height=600, key="radar_map")

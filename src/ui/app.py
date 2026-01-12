@@ -149,7 +149,8 @@ def main():
         active_time,
         config['bbox'],
         config['layers'],
-        supabase_client
+        supabase_client,
+        aemet_key=config.get('aemet_key')
     )
 
     # --- Animation Logic ---

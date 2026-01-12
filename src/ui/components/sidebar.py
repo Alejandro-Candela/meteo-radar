@@ -17,6 +17,15 @@ def render_sidebar():
             st.error("❌ Cloud Cache: Off (Local Mode)")        
         config['supabase'] = supabase
         
+        # --- AEMET Config ---
+        with st.expander("🔐 Configuración AEMET"):
+            aemet_key = st.text_input("API Key (AEMET OpenData)", type="password", help="Obtén tu key en opendata.aemet.es")
+            config['aemet_key'] = aemet_key
+            if aemet_key:
+                st.caption("✅ Key detectada")
+            else:
+                st.caption("⚠️ Requiere Key para radar oficial")
+
         st.header("📍 Región")
         region_options = {
             "Norte (Mungia/Euskadi)": (38.0, 48.0, -8.0, 2.0),
@@ -25,9 +34,6 @@ def render_sidebar():
             "Noroeste (Galicia)": (38.0, 48.0, -14.0, -4.0),
         }
         selected_region_name = st.selectbox("Seleccionar Zona", list(region_options.keys()), index=0)
-        
-        # Adjustable Coverage Radius
-        radius_delta = st.slider("📡 Radio de Cobertura (Grados)", 2.0, 30.0, 10.0, 0.5, help="Define medio lado del cuadrado de visión. 10.0 = 20x20 grados.")
         
         # Custom Coordinates Input
         st.divider()
@@ -39,10 +45,10 @@ def render_sidebar():
                 parts = [float(p.strip()) for p in custom_coords.split(',')]
                 if len(parts) == 2:
                     c_lat, c_lon = parts
-                    delta = radius_delta 
+                    delta = 10.0 # Fixed default for custom point
                     min_lat, max_lat = c_lat - delta, c_lat + delta
                     min_lon, max_lon = c_lon - delta, c_lon + delta
-                    st.toast(f"Usando coordenadas personalizadas: {c_lat}, {c_lon} (Radio: {delta})", icon="🎯")
+                    st.toast(f"Usando coordenadas personalizadas: {c_lat}, {c_lon}", icon="🎯")
                 else:
                     st.error("Formato inválido. Use: 'Lat, Lon'")
                     min_lat, max_lat, min_lon, max_lon = region_options[selected_region_name]
@@ -56,7 +62,7 @@ def render_sidebar():
             c_lat = (p_min_lat + p_max_lat) / 2
             c_lon = (p_min_lon + p_max_lon) / 2
             
-            delta = radius_delta
+            delta = 10.0
             min_lat, max_lat = c_lat - delta, c_lat + delta
             min_lon, max_lon = c_lon - delta, c_lon + delta
             
@@ -89,7 +95,8 @@ def render_sidebar():
             'precip': st.checkbox("🌧️ Precipitación", value=True),
             'temp': st.checkbox("🌡️ Temperatura", value=False),
             'pressure': st.checkbox("⏲️ Presión", value=False),
-            'wind': st.checkbox("💨 Viento", value=False)
+            'wind': st.checkbox("💨 Viento", value=False),
+            'aemet_radar': st.checkbox("📡 Radar AEMET (Oficial)", value=False, disabled=not config.get('aemet_key'))
         }
 
         st.divider()
