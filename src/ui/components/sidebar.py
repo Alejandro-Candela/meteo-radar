@@ -81,7 +81,7 @@ def render_sidebar():
             "Hemisférica (55 km/px)": 0.5,
             "Global (110 km/px)": 1.0
         }
-        selected_res_name = st.selectbox("Resolución del radar", list(resolution_options.keys()), index=4) # Adjusted index default 
+        selected_res_name = st.selectbox("Resolución del radar", list(resolution_options.keys()), index=1) # Adjusted index default 
         config['resolution'] = resolution_options[selected_res_name]
         
         # --- Legend ---
