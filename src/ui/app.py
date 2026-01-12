@@ -89,41 +89,7 @@ def main():
     if 'slider_forecast' in st.session_state and st.session_state['slider_forecast'] != st.session_state['internal_fore']:
         st.session_state['slider_forecast'] = st.session_state['internal_fore']
 
-    # --- Dual Column Sliders ---
-    slider_col1, slider_col2 = st.columns(2)
-    
-    with slider_col1:
-        st.markdown("##### 📜 Histórico")
-        sel_hist = st.slider(
-            "Seleccionar hora pasada",
-            min_value=min_hist,
-            max_value=max_hist,
-            value=st.session_state['internal_hist'],
-            format="DD/MM HH:mm",
-            key="slider_history",
-            step=timedelta(hours=1),
-            label_visibility="collapsed",
-            on_change=update_hist
-        )
-        if st.button("Ver Histórico", key="btn_activate_hist", use_container_width=True):
-             st.session_state['active_mode'] = 'history'
-
-    with slider_col2:
-        st.markdown("##### 🔮 Predicción")
-        sel_fore = st.slider(
-            "Seleccionar hora futura",
-            min_value=min_fore,
-            max_value=max_fore,
-            value=st.session_state['internal_fore'],
-            format="DD/MM HH:mm",
-            key="slider_forecast",
-            label_visibility="collapsed",
-            on_change=update_fore
-        )
-        if st.button("Ver Predicción", key="btn_activate_fore", use_container_width=True, type="primary"):
-             st.session_state['active_mode'] = 'forecast'
-
-    # --- Active Logic ---
+    # --- Active Logic Setup ---
     active_ds = None
     active_time = None
     start_msg = ""
@@ -132,32 +98,84 @@ def main():
         active_ds = ds_history
         active_time = st.session_state['internal_hist']
         if active_time.tzinfo is None: active_time = active_time.replace(tzinfo=timezone.utc)
-        start_msg = f"📜 Histórico: {active_time.strftime('%H:%M')}"
+        start_msg = f"📜 Histórico"
     else:
         active_ds = ds_forecast
         active_time = st.session_state['internal_fore']
         if active_time.tzinfo is None: active_time = active_time.replace(tzinfo=timezone.utc)
-        start_msg = f"🔮 Predicción: {active_time.strftime('%H:%M')}"
+        start_msg = f"🔮 Predicción"
 
-    st.info(f"{start_msg} | Cargando datos...", icon="⏳")
-
-    # Render Map and hold result
-    supabase_client = get_supabase()
+    # --- LAYOUT: 2/3 Map, 1/3 Controls ---
+    col_map, col_controls = st.columns([2, 1], gap="medium")
     
-    display_map(
-        active_ds, 
-        active_time,
-        config['bbox'],
-        config['layers'],
-        supabase_client,
-        aemet_key=config.get('aemet_key')
-    )
+    # --- RIGHT COLUMN: Controls & Metrics ---
+    with col_controls:
+        st.markdown("### 🎛️ Controles")
+        
+        # 1. History Control
+        with st.expander("📜 Histórico (Pasado)", expanded=(st.session_state['active_mode'] == 'history')):
+            sel_hist = st.slider(
+                "Hora",
+                min_value=min_hist,
+                max_value=max_hist,
+                value=st.session_state['internal_hist'],
+                format="DD/MM HH:mm",
+                key="slider_history",
+                step=timedelta(hours=1),
+                label_visibility="collapsed",
+                on_change=update_hist
+            )
+            if st.button("Activar Histórico", key="btn_activate_hist", use_container_width=True):
+                 st.session_state['active_mode'] = 'history'
+
+        # 2. Forecast Control
+        with st.expander("🔮 Predicción (Futuro)", expanded=(st.session_state['active_mode'] == 'forecast')):
+            sel_fore = st.slider(
+                "Hora",
+                min_value=min_fore,
+                max_value=max_fore,
+                value=st.session_state['internal_fore'],
+                format="DD/MM HH:mm",
+                key="slider_forecast",
+                label_visibility="collapsed",
+                on_change=update_fore
+            )
+            if st.button("Activar Predicción", key="btn_activate_fore", use_container_width=True, type="primary"):
+                 st.session_state['active_mode'] = 'forecast'
+
+        # 3. Metrics
+        st.divider()
+        st.markdown("### 📊 Datos en tiempo real")
+        st.info(f"{start_msg}: **{active_time.strftime('%d/%m/%Y %H:%M')} UTC**")
+        
+        metric_col1, metric_col2 = st.columns(2)
+        if active_ds and 'precipitation' in active_ds:
+            try:
+                layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
+                max_precip = layer_data.max().item()
+                mean_precip = layer_data.mean().item()
+                metric_col1.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
+                metric_col2.metric("Promedio", f"{mean_precip:.2f}")
+            except:
+                 metric_col1.metric("Lluvia Máxima", "N/A")
+                 metric_col2.metric("Promedio", "N/A")
+
+    # --- LEFT COLUMN: Map ---
+    with col_map:
+        # Render Map
+        supabase_client = get_supabase()
+        display_map(
+            active_ds, 
+            active_time,
+            config['bbox'],
+            config['layers'],
+            supabase_client,
+            aemet_key=config.get('aemet_key')
+        )
 
     # --- Animation Logic ---
     if config['auto_play']:
         # Block execution to let user see the map
-        # time.sleep happens ON SERVER. 
-        # We assume client renders in parallel.
         time.sleep(config['play_speed'])
         
         # Increment logic
@@ -178,21 +196,6 @@ def main():
              st.session_state['internal_fore'] = next_time
         
         st.rerun()
-    # --- Info Bar ---
-    col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
-    col_info1.info(f"{start_msg}: **{active_time.strftime('%d/%m/%Y %H:%M')} UTC**")
-
-    # --- Metrics ---
-    if active_ds and 'precipitation' in active_ds:
-        try:
-            layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
-            max_precip = layer_data.max().item()
-            mean_precip = layer_data.mean().item()
-            col_info2.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
-            col_info3.metric("Promedio", f"{mean_precip:.2f}")
-        except:
-             col_info2.metric("Lluvia Máxima", "N/A")
-             col_info3.metric("Promedio", "N/A")
 
     # --- End of Main ---
 
