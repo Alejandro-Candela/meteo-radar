@@ -1,7 +1,7 @@
 import os
 import zipfile
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import xarray as xr
 from typing import Tuple, List
@@ -37,16 +37,42 @@ class BulkExportService:
         Generates a ZIP file containing TIFF images for the specified range and interval.
         Returns: (zip_file_path, image_count)
         """
+        # Note: We will handle timezone normalization AFTER fetching the dataset structure,
+        # or we normalize to UTC first for the query if needed, but critical check is against DS.
+        
         min_lat, max_lat, min_lon, max_lon = region_bbox
         bbox = BoundingBox(min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon)
         
-        # Extend range to ensure we cover the full requested period
-        # OpenMeteo works with days.
-        tr = TimeRange(start=start_date, end=end_date + timedelta(days=1)) 
+        # Initial normalization to UTC for the request (OpenMeteo likes UTC usually)
+        # But we keep original references to adjust later based on DS
+        req_start = start_date
+        req_end = end_date
         
-        # Fetch ONE dataset covering the whole range (OpenMeteo Forecast endpoint handles recent past)
-        # using get_history_view which returns interpolated data
+        tr = TimeRange(start=req_start, end=req_end + timedelta(days=1)) 
+        
+        # Fetch ONE dataset covering the whole range 
         ds = self.facade.get_history_view(bbox, tr, resolution)
+        
+        # DYNAMIC TIMEZONE ALIGNMENT
+        # Check if dataset time index is TZ-aware
+        ds_is_aware = False
+        if 'time' in ds.indexes:
+            # Check for pandas DatetimeIndex awareness
+            index = ds.indexes['time']
+            if hasattr(index, 'tz') and index.tz is not None:
+                ds_is_aware = True
+        
+        # Align inputs to match dataset
+        if ds_is_aware:
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
+        else:
+            if start_date.tzinfo is not None:
+                start_date = start_date.replace(tzinfo=None)
+            if end_date.tzinfo is not None:
+                end_date = end_date.replace(tzinfo=None)
         
         # Create Temp Dir for Tiffs
         tmp_dir = tempfile.mkdtemp()
