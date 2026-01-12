@@ -6,6 +6,7 @@ import numpy as np
 import os
 import shutil
 import xarray as xr
+import rioxarray
 from datetime import datetime
 from src.adapters.supabase_client import SupabaseClient
 
