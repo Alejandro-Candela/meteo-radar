@@ -22,7 +22,7 @@ def display_map(
     # Toggle 'Dark Matter' or 'Positron' based on preference? Stick to Positron for visibility of colors.
     m = leafmap.Map(
         center=[(max_lat+min_lat)/2, (max_lon+min_lon)/2],
-        zoom=7,
+        zoom=6,
         draw_control=False,
         measure_control=False,
     )
