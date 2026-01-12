@@ -14,9 +14,7 @@ def render_sidebar():
         if supabase:
             st.success("✅ Cloud Cache: Conectado")
         else:
-            st.error("❌ Cloud Cache: Off (Local Mode)")
-            st.caption("Faltan Secretos de Supabase. La app en la nube puede no mostrar capas.")
-        
+            st.error("❌ Cloud Cache: Off (Local Mode)")        
         config['supabase'] = supabase
         
         st.header("📍 Región")
@@ -97,7 +95,7 @@ def render_sidebar():
 
         st.divider()
         st.subheader("▶️ Animación")
-        config['auto_play'] = st.checkbox("Reproducción Automática", value=True, key="auto_play")
+        config['auto_play'] = st.checkbox("Reproducción Automática", key="auto_play")
         config['play_speed'] = st.slider("Velocidad (seg/frame)", 0.2, 2.0, 2.0)
         
         st.divider()

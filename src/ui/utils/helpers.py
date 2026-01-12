@@ -131,9 +131,18 @@ def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vm
 def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime, colormap='viridis', vmin=None, vmax=None) -> str:
     """
     Ensures BOTH PNG (for map) and TIFF (for download) exist in Supabase.
+    Uses st.session_state to cache URLs and avoid repeated DB calls.
     Returns: URL of the PNG for rendering.
     """
-    
+    # 0. Check Session Cache (RAM)
+    if 'layer_cache' not in st.session_state:
+        st.session_state['layer_cache'] = {}
+        
+    cache_key = f"{bbox}_{variable}_{timestamp.isoformat()}_{colormap}"
+    if cache_key in st.session_state['layer_cache']:
+        # print(f"DEBUG: Cache Hit for {cache_key}")
+        return st.session_state['layer_cache'][cache_key]
+
     # 1. Local Fallback (if no client)
     if client is None:
         # Just generate PNG locally for map
@@ -147,6 +156,7 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
     png_url = client.get_layer_url(bbox, variable, timestamp, ext=".png", bucket="radar_pngs")
 
     if png_url:
+        st.session_state['layer_cache'][cache_key] = png_url
         return png_url
         
     # 3. Not found, Generate & Upload BOTH
@@ -183,7 +193,11 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
         except:
             pass
             
-        return final_url if final_url else tmp_png.name
+        if final_url:
+             st.session_state['layer_cache'][cache_key] = final_url
+             return final_url
+        
+        return tmp_png.name
 
     except Exception as e:
         print(f"Error dual-uploading: {e}")

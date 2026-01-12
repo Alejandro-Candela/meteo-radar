@@ -20,7 +20,7 @@ st.set_page_config(layout="wide", page_title="Meteo Radar AI - Dual Mode")
 
 def main():
     inject_custom_css()
-    st.title("📡 Meteo Radar - Dual Timeline")
+    st.title("📡 Meteo Radar: MeteoGrid + FiClima")
     
     # --- Sidebar & Config ---
     if 'map_refresh_trigger' not in st.session_state:
