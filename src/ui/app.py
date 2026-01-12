@@ -81,6 +81,14 @@ def main():
         st.session_state['internal_fore'] = st.session_state.slider_forecast
         st.session_state['active_mode'] = 'forecast'
 
+    # --- Sync Sliders with Internal State (for Animation) ---
+    # We must update the slider key BEFORE the widget is rendered to avoid StreamlitAPIException
+    if 'slider_history' in st.session_state and st.session_state['slider_history'] != st.session_state['internal_hist']:
+        st.session_state['slider_history'] = st.session_state['internal_hist']
+        
+    if 'slider_forecast' in st.session_state and st.session_state['slider_forecast'] != st.session_state['internal_fore']:
+        st.session_state['slider_forecast'] = st.session_state['internal_fore']
+
     # --- Dual Column Sliders ---
     slider_col1, slider_col2 = st.columns(2)
     
