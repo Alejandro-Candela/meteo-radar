@@ -177,7 +177,7 @@ def main():
         # 3. Metrics
         st.divider()
         with st.expander("📊 Datos en Tiempo Real", expanded=True):
-            st.caption(f"**Hora:** {active_time.strftime('%H:%M')} UTC | **Fuente:** OpenMeteo")
+            st.caption(f"**Fecha:** {active_time.strftime('%d/%m/%Y %H:%M')} UTC | **Fuente:** OpenMeteo")
             
             if active_ds:
                 try:
