@@ -44,12 +44,36 @@ def display_map(
         lats = active_ds[lat_dim].values
         lons = active_ds[lon_dim].values
         
+        import numpy as np
+        
+        # Calculate resolution (safely)
+        lat_res = 0.0
+        if len(lats) > 1:
+            lat_res = abs(float(lats[1] - lats[0]))
+        else:
+             lat_res = 0.01 # Default fallback
+             
+        lon_res = 0.0
+        if len(lons) > 1:
+            lon_res = abs(float(lons[1] - lons[0]))
+        else:
+            lon_res = 0.01 # Default fallback
+            
         actual_min_lat = float(lats.min())
         actual_max_lat = float(lats.max())
         actual_min_lon = float(lons.min())
         actual_max_lon = float(lons.max())
         
-        overlay_bounds = [[actual_min_lat, actual_min_lon], [actual_max_lat, actual_max_lon]]
+        # FIX: The coordinates represent the CENTER of the pixel.
+        # ImageOverlay expects the outer EDGES of the image.
+        # We must expand the bounds by half-resolution in all directions.
+        half_res_lat = lat_res / 2.0
+        half_res_lon = lon_res / 2.0
+        
+        overlay_bounds = [
+            [actual_min_lat - half_res_lat, actual_min_lon - half_res_lon], 
+            [actual_max_lat + half_res_lat, actual_max_lon + half_res_lon]
+        ]
         
     except Exception as e:
         # Fallback
