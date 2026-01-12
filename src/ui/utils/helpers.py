@@ -179,6 +179,12 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
         
         # Create TIFF (using existing logic pattern or rioxarray)
         # We need to ensure CRS is set for rioxarray
+        print(f"DEBUG: da type: {type(da)}")
+        print(f"DEBUG: has rio? {hasattr(da, 'rio')}")
+        if not hasattr(da, 'rio'):
+            import rioxarray
+            print("DEBUG: Force imported rioxarray")
+        
         if da.rio.crs is None:
              da.rio.write_crs("EPSG:4326", inplace=True)
         

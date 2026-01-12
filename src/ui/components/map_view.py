@@ -28,7 +28,7 @@ def display_map(
         draw_control=False,
         measure_control=False,
     )
-    m.add_basemap("CARTODB_POSITRON")
+    m.add_basemap("CartoDB.Positron")
     
     # No data check
     if active_ds is None:
