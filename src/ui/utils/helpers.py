@@ -12,6 +12,9 @@ from src.adapters.supabase_client import SupabaseClient
 def inject_custom_css():
     st.markdown("""
         <style>
+        html {
+            font-size: 80% !important;
+        }
         /* Compact Sliders */
         .stSlider {
             padding-top: 0rem !important;

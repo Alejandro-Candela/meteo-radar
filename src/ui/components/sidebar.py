@@ -68,10 +68,9 @@ def render_sidebar():
             
         st.divider()
         resolution_options = {
-            "Alta (1.1 km/px)": 0.01,
-            "Media (2.2 km/px)": 0.02,
-            "Baja (5.5 km/px)": 0.05,
-            "Muy Baja (11 km/px)": 0.1,
+            "Detalle (5.5 km/px)": 0.05,
+            "Local (11 km/px)": 0.1,
+            "Nacional (22 km/px)": 0.2,
             "Continental (28 km/px)": 0.25,
             "Hemisférica (55 km/px)": 0.5,
             "Global (110 km/px)": 1.0
