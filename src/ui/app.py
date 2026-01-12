@@ -176,20 +176,74 @@ def main():
 
         # 3. Metrics
         st.divider()
-        st.markdown("### 📊 Datos en tiempo real")
-        st.info(f"{start_msg}: **{active_time.strftime('%d/%m/%Y %H:%M')} UTC**")
-        
-        metric_col1, metric_col2 = st.columns(2)
-        if active_ds and 'precipitation' in active_ds:
-            try:
-                layer_data = active_ds['precipitation'].sel(time=active_time, method="nearest")
-                max_precip = layer_data.max().item()
-                mean_precip = layer_data.mean().item()
-                metric_col1.metric("Lluvia Máxima", f"{max_precip:.2f} mm/h")
-                metric_col2.metric("Promedio", f"{mean_precip:.2f}")
-            except:
-                 metric_col1.metric("Lluvia Máxima", "N/A")
-                 metric_col2.metric("Promedio", "N/A")
+        with st.expander("📊 Datos en Tiempo Real", expanded=True):
+            st.caption(f"**Hora:** {active_time.strftime('%H:%M')} UTC | **Fuente:** OpenMeteo")
+            
+            if active_ds:
+                try:
+                    # Helper to get scalar value safely
+                    def get_val(var_name, method="nearest"):
+                        if var_name in active_ds:
+                            val = active_ds[var_name].sel(time=active_time, method=method).mean().item()
+                            return val
+                        return None
+                        
+                    def fmt(val, unit="", decimal=1):
+                        if val is None: return "N/A"
+                        return f"{val:.{decimal}f}{unit}"
+
+                    # --- Fetching Values (Mean across view or specific point) ---
+                    # Currently fetching MEAN across the visible region for simplicity
+                    # ideally this should be "Point" value if user clicked, but "Mean" is good for region overview
+                    
+                    temp = get_val('temperature')
+                    app_temp = get_val('apparent_temp')
+                    precip = get_val('precipitation') # Mean precip might be low, MAX often better for precip
+                    max_precip = active_ds['precipitation'].sel(time=active_time, method="nearest").max().item() if 'precipitation' in active_ds else 0
+                    
+                    humidity = get_val('humidity')
+                    clouds = get_val('cloud_cover')
+                    
+                    wind = get_val('wind_speed')
+                    gusts = get_val('wind_gusts')
+                    wind_dir = get_val('wind_direction')
+                    
+                    pressure = get_val('pressure')
+
+                    # --- Rendering Compact Grid ---
+                    
+                    # Row 1: Temperature
+                    st.markdown("**🌡️ Temperatura**")
+                    c1, c2 = st.columns(2)
+                    c1.markdown(f"<span style='font-size:0.9em; color:#666'>Temperatura</span><br>**{fmt(temp, 'ºC')}**", unsafe_allow_html=True)
+                    c2.markdown(f"<span style='font-size:0.9em; color:#666'>Sensación</span><br>**{fmt(app_temp, 'ºC')}**", unsafe_allow_html=True)
+                    
+                    st.divider()
+                    
+                    # Row 2: Conditions
+                    st.markdown("**🌧️ Condiciones**")
+                    c1, c2, c3 = st.columns(3)
+                    c1.markdown(f"<span style='font-size:0.8em; color:#666'>Lluvia Max</span><br>**{max_precip:.1f}** <span style='font-size:0.8em'>mm</span>", unsafe_allow_html=True)
+                    c2.markdown(f"<span style='font-size:0.8em; color:#666'>Humedad</span><br>**{fmt(humidity, '%', 0)}**", unsafe_allow_html=True)
+                    c3.markdown(f"<span style='font-size:0.8em; color:#666'>Nubes</span><br>**{fmt(clouds, '%', 0)}**", unsafe_allow_html=True)
+                    
+                    st.divider()
+                    
+                    # Row 3: Wind
+                    st.markdown("**💨 Viento**")
+                    c1, c2 = st.columns(2)
+                    c1.markdown(f"<span style='font-size:0.9em; color:#666'>Velocidad</span><br>**{fmt(wind, '')}** km/h", unsafe_allow_html=True)
+                    c2.markdown(f"<span style='font-size:0.9em; color:#666'>Rachas</span><br>**{fmt(gusts, '')}** km/h", unsafe_allow_html=True)
+                    
+                    st.divider()
+                    
+                    # Row 4: Pressure
+                    st.markdown(f"**⏲️ Presión:** {fmt(pressure, ' hPa', 0)}")
+
+                except Exception as e:
+                    st.warning(f"Error calculando métricas: {e}")
+            else:
+                st.info("Sin datos cargados.")
 
     # --- LEFT COLUMN: Map ---
     with col_map:

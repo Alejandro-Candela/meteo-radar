@@ -74,7 +74,11 @@ class OpenMeteoAdapter(WeatherDataProvider):
             "temperature_2m", 
             "surface_pressure", 
             "wind_speed_10m", 
-            "wind_direction_10m"
+            "wind_direction_10m",
+            "relative_humidity_2m",
+            "apparent_temperature",
+            "cloud_cover",
+            "wind_gusts_10m"
         ]
         
         # Mapping API names to Internal names
@@ -83,7 +87,11 @@ class OpenMeteoAdapter(WeatherDataProvider):
             "temperature_2m": "temperature",
             "surface_pressure": "pressure",
             "wind_speed_10m": "wind_speed",
-            "wind_direction_10m": "wind_direction"
+            "wind_direction_10m": "wind_direction",
+            "relative_humidity_2m": "humidity",
+            "apparent_temperature": "apparent_temp",
+            "cloud_cover": "cloud_cover",
+            "wind_gusts_10m": "wind_gusts"
         }
 
         params = {
