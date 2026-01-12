@@ -101,7 +101,7 @@ def main():
             value=st.session_state['internal_hist'],
             format="DD/MM HH:mm",
             key="slider_history",
-            step=timedelta(hours=2),
+            step=timedelta(hours=1),
             label_visibility="collapsed",
             on_change=update_hist
         )
@@ -164,7 +164,7 @@ def main():
         current_time = active_time
         
         if st.session_state['active_mode'] == 'history':
-             next_time = current_time + timedelta(hours=2)
+             next_time = current_time + timedelta(hours=1)
              if next_time > max_hist:
                  next_time = min_hist
              
