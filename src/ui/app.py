@@ -61,8 +61,7 @@ def main():
 
     # --- Shadow State Initialization ---
     if 'internal_hist' not in st.session_state:
-        st.session_state['internal_hist'] = min_hist # Start from beginning
-    # Ensure internal state is within bounds (if data reloaded)
+        st.session_state['internal_hist'] = max_hist # Start from LATEST time
     # Ensure internal state is within bounds (if data reloaded)
     if st.session_state['internal_hist'] < min_hist or st.session_state['internal_hist'] > max_hist:
         st.session_state['internal_hist'] = max_hist
@@ -71,6 +70,10 @@ def main():
         st.session_state['internal_fore'] = min_fore
     if st.session_state['internal_fore'] < min_fore or st.session_state['internal_fore'] > max_fore:
         st.session_state['internal_fore'] = min_fore
+        
+    # --- Animation State ---
+    if 'playing_hist' not in st.session_state: st.session_state['playing_hist'] = False
+    if 'playing_fore' not in st.session_state: st.session_state['playing_fore'] = False
 
     # Callbacks
     def update_hist():
@@ -80,6 +83,18 @@ def main():
     def update_fore():
         st.session_state['internal_fore'] = st.session_state.slider_forecast
         st.session_state['active_mode'] = 'forecast'
+        
+    def toggle_play_hist():
+        st.session_state['playing_hist'] = not st.session_state['playing_hist']
+        if st.session_state['playing_hist']:
+            st.session_state['playing_fore'] = False # Stop others
+            st.session_state['active_mode'] = 'history'
+            
+    def toggle_play_fore():
+        st.session_state['playing_fore'] = not st.session_state['playing_fore']
+        if st.session_state['playing_fore']:
+            st.session_state['playing_hist'] = False # Stop others
+            st.session_state['active_mode'] = 'forecast'
 
     # --- Sync Sliders with Internal State (for Animation) ---
     # We must update the slider key BEFORE the widget is rendered to avoid StreamlitAPIException
@@ -114,34 +129,50 @@ def main():
         
         # 1. History Control
         with st.expander("📜 Histórico (Pasado)", expanded=(st.session_state['active_mode'] == 'history')):
-            sel_hist = st.slider(
-                "Hora",
-                min_value=min_hist,
-                max_value=max_hist,
-                value=st.session_state['internal_hist'],
-                format="DD/MM HH:mm",
-                key="slider_history",
-                step=timedelta(hours=1),
-                label_visibility="collapsed",
-                on_change=update_hist
-            )
+            c_sl, c_btn = st.columns([5, 1])
+            with c_sl:
+                sel_hist = st.slider(
+                    "Hora",
+                    min_value=min_hist,
+                    max_value=max_hist,
+                    value=st.session_state['internal_hist'],
+                    format="DD/MM HH:mm",
+                    key="slider_history",
+                    step=timedelta(hours=1),
+                    label_visibility="collapsed",
+                    on_change=update_hist
+                )
+            with c_btn:
+                icon = "⏸️" if st.session_state['playing_hist'] else "▶️"
+                st.button(icon, key="btn_play_hist", on_click=toggle_play_hist)
+            
             if st.button("Activar Histórico", key="btn_activate_hist", use_container_width=True):
                  st.session_state['active_mode'] = 'history'
+                 st.session_state['playing_hist'] = False
+                 st.session_state['playing_fore'] = False
 
         # 2. Forecast Control
         with st.expander("🔮 Predicción (Futuro)", expanded=(st.session_state['active_mode'] == 'forecast')):
-            sel_fore = st.slider(
-                "Hora",
-                min_value=min_fore,
-                max_value=max_fore,
-                value=st.session_state['internal_fore'],
-                format="DD/MM HH:mm",
-                key="slider_forecast",
-                label_visibility="collapsed",
-                on_change=update_fore
-            )
+            c_sl_f, c_btn_f = st.columns([5, 1])
+            with c_sl_f:
+                sel_fore = st.slider(
+                    "Hora",
+                    min_value=min_fore,
+                    max_value=max_fore,
+                    value=st.session_state['internal_fore'],
+                    format="DD/MM HH:mm",
+                    key="slider_forecast",
+                    label_visibility="collapsed",
+                    on_change=update_fore
+                )
+            with c_btn_f:
+                icon_f = "⏸️" if st.session_state['playing_fore'] else "▶️"
+                st.button(icon_f, key="btn_play_fore", on_click=toggle_play_fore)
+
             if st.button("Activar Predicción", key="btn_activate_fore", use_container_width=True, type="primary"):
                  st.session_state['active_mode'] = 'forecast'
+                 st.session_state['playing_hist'] = False
+                 st.session_state['playing_fore'] = False
 
         # 3. Metrics
         st.divider()
@@ -174,26 +205,23 @@ def main():
         )
 
     # --- Animation Logic ---
-    if config['auto_play']:
+    if st.session_state['playing_hist'] or st.session_state['playing_fore']:
         # Block execution to let user see the map
         time.sleep(config['play_speed'])
         
-        # Increment logic
-        current_time = active_time
-        
-        if st.session_state['active_mode'] == 'history':
-             next_time = current_time + timedelta(hours=1)
+        if st.session_state['playing_hist']:
+             next_time = st.session_state['internal_hist'] + timedelta(hours=1)
              if next_time > max_hist:
                  next_time = min_hist
+             st.session_state['internal_hist'] = next_time
+             st.session_state['active_mode'] = 'history'
              
-             st.session_state['internal_hist'] = next_time 
-             
-        else:
-             next_time = current_time + timedelta(hours=1)
+        elif st.session_state['playing_fore']:
+             next_time = st.session_state['internal_fore'] + timedelta(hours=1)
              if next_time > max_fore:
                  next_time = min_fore
-             
              st.session_state['internal_fore'] = next_time
+             st.session_state['active_mode'] = 'forecast'
         
         st.rerun()
 

@@ -101,7 +101,7 @@ def render_sidebar():
 
         st.divider()
         st.subheader("▶️ Animación")
-        config['auto_play'] = st.checkbox("Reproducción Automática", key="auto_play")
+        # config['auto_play'] = st.checkbox("Reproducción Automática", key="auto_play") # Moved to main area
         config['play_speed'] = st.slider("Velocidad (seg/frame)", 0.1, 2.0, 0.2)
         
         st.divider()
