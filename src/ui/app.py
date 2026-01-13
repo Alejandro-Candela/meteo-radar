@@ -261,35 +261,28 @@ def main():
     with col_map:
         # Render Map
         supabase_client = get_supabase()
+        
+        # Determine Animation State and Play Speed
+        is_playing = st.session_state['playing_hist'] or st.session_state['playing_fore']
+        
+        # We need to inform the user if frames are generating
+        if is_playing:
+             st.caption("🔄 Generando secuencia de animación, por favor espere...")
+
         display_map(
             active_ds, 
             active_time,
             config['bbox'],
             config['layers'],
             supabase_client,
-            aemet_key=config.get('aemet_key')
+            aemet_key=config.get('aemet_key'),
+            animate=is_playing,
+            animation_speed=int(config.get('play_speed', 0.5) * 1000)
         )
-
+        
     # --- Animation Logic ---
-    if st.session_state['playing_hist'] or st.session_state['playing_fore']:
-        # Block execution to let user see the map
-        time.sleep(config['play_speed'])
-        
-        if st.session_state['playing_hist']:
-             next_time = st.session_state['internal_hist'] + timedelta(hours=1)
-             if next_time > max_hist:
-                 next_time = min_hist
-             st.session_state['internal_hist'] = next_time
-             st.session_state['active_mode'] = 'history'
-             
-        elif st.session_state['playing_fore']:
-             next_time = st.session_state['internal_fore'] + timedelta(hours=1)
-             if next_time > max_fore:
-                 next_time = min_fore
-             st.session_state['internal_fore'] = next_time
-             st.session_state['active_mode'] = 'forecast'
-        
-        st.rerun()
+    # Handled by Client-Side JS in map_view.py now to prevent flicker.
+    # No more st.rerun() loops here.
 
     # --- End of Main ---
 

@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 import tempfile
 import matplotlib.pyplot as plt
@@ -136,7 +137,7 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
     """
     Ensures BOTH PNG (for map) and TIFF (for download) exist in Supabase.
     Uses st.session_state to cache URLs and avoid repeated DB calls.
-    Returns: URL of the PNG for rendering.
+    Returns: URL of the PNG for rendering (or base64 string if local).
     """
     # 0. Check Session Cache (RAM)
     if 'layer_cache' not in st.session_state:
@@ -153,7 +154,15 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
         generate_colored_png(da, tmp.name, colormap, vmin, vmax)
-        return tmp.name
+        
+        try:
+            with open(tmp.name, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode()
+            os.remove(tmp.name)
+            return f"data:image/png;base64,{b64_data}"
+        except Exception as e:
+            print(f"Error encoding local base64: {e}")
+            return ""
         
     # 2. Check Exists (PNG is the critical one for map)
     # Use "radar_pngs" bucket
@@ -179,11 +188,8 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
         
         # Create TIFF (using existing logic pattern or rioxarray)
         # We need to ensure CRS is set for rioxarray
-        print(f"DEBUG: da type: {type(da)}")
-        print(f"DEBUG: has rio? {hasattr(da, 'rio')}")
         if not hasattr(da, 'rio'):
             import rioxarray
-            print("DEBUG: Force imported rioxarray")
         
         if da.rio.crs is None:
              da.rio.write_crs("EPSG:4326", inplace=True)
@@ -207,12 +213,19 @@ def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, ti
              st.session_state['layer_cache'][cache_key] = final_url
              return final_url
         
-        return tmp_png.name
+        return ""
 
     except Exception as e:
         print(f"Error dual-uploading: {e}")
-        # Fallback to local path if upload fails
-        return tmp_png.name
+        # Fallback to local base64
+        try:
+             # Re-generate if lost
+             generate_colored_png(da, tmp_png.name, colormap, vmin, vmax)
+             with open(tmp_png.name, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode()
+             return f"data:image/png;base64,{b64_data}"
+        except:
+             return ""
 
 def get_radar_legend_html():
     return """
