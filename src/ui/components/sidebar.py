@@ -94,6 +94,8 @@ def render_sidebar():
         config['layers'] = {
             'precip': st.checkbox("🌧️ Precipitación", value=False),
             'temp': st.checkbox("🌡️ Temperatura", value=True),
+            'cloud': st.checkbox("☁️ Nubes", value=False),
+            'humidity': st.checkbox("💧 Humedad", value=False),
             'pressure': st.checkbox("⏲️ Presión", value=False),
             'wind': st.checkbox("💨 Viento", value=False),
             'aemet_radar': st.checkbox("📡 Radar AEMET (Oficial)", value=False, disabled=not config.get('aemet_key'))

@@ -153,7 +153,37 @@ def display_map(
         except Exception:
             pass
 
-    # 5. AEMET Radar (Overlay)
+    # 5. Clouds
+    if layers_state.get('cloud', False) and 'cloud_cover' in active_ds:
+        try:
+            layer_data = active_ds['cloud_cover'].sel(time=active_time, method="nearest")
+            path = get_or_upload_layer(
+                 supabase_client, layer_data, "cloud", bbox_tuple, active_time,
+                 colormap="Greys", vmin=0, vmax=100
+            )
+            folium.raster_layers.ImageOverlay(
+                image=path, bounds=overlay_bounds, name="Nubes (%)",
+                opacity=0.5, interactive=False, cross_origin=False, zindex=5
+            ).add_to(m)
+        except Exception:
+            pass
+
+    # 6. Humidity
+    if layers_state.get('humidity', False) and 'humidity' in active_ds:
+        try:
+            layer_data = active_ds['humidity'].sel(time=active_time, method="nearest")
+            path = get_or_upload_layer(
+                 supabase_client, layer_data, "humidity", bbox_tuple, active_time,
+                 colormap="GnBu", vmin=0, vmax=100
+            )
+            folium.raster_layers.ImageOverlay(
+                image=path, bounds=overlay_bounds, name="Humedad (%)",
+                opacity=0.5, interactive=False, cross_origin=False, zindex=6
+            ).add_to(m)
+        except Exception:
+            pass
+            
+    # 7. AEMET Radar (Overlay)
     if layers_state.get('aemet_radar', False) and aemet_key:
         try:
             adapter = AemetAdapter(aemet_key)
