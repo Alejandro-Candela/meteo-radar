@@ -1,6 +1,6 @@
 # 📡 Meteo Radar AI (MVP)
 
-> **Visualizador Meteorológico de Alta Precisión con Análisis Histórico y Predictivo.**
+> **Visualizador Meteorológico de Alta Precisión con Análisis Histórico y Predictivo.** - [Ver Demo Desplegada](https://meteo-radar.streamlit.app/)
 
 ![Status](https://img.shields.io/badge/Status-Beta-blue)
 ![License](https://img.shields.io/badge/License-NonCommercial-red)
@@ -8,11 +8,13 @@
 
 ## 📋 Descripción
 
-Meteo Radar AI es una herramienta SaaS de visualización meteorológica diseñada para ofrecer análisis detallados de precipitaciones y nubosidad. Diferenciándose de los mapas genéricos, este sistema permite:
+Meteo Radar AI es una herramienta SaaS de visualización meteorológica diseñada para ofrecer análisis detallados de precipitaciones y nubosidad. Diferenciándose de los mapas genéricos, este sistema permite interpolación avanzada y persistencia de datos inteligente.
 
-1. **Exploración Dual**: Navegar por datos históricos (últimos 10 días) y predicciones futuras (+24h) en una misma interfaz.
-2. **Alta Resolución**: Interpolación espacial avanzada para visualizar datos en micro-escala (hasta 1.1km).
-3. **Visualización Profesional**: Capas de radar dinámicas, leyenda de intensidad y controles temporales intuitivos.
+### 🌟 Novedades (v1.2)
+
+- **Flicker-Free Animation**: Motor de animación cliente-side (Leaflet/JS) para transiciones suaves sin recargar la página.
+- **Optimistic UI & Threading**: Generación instantánea de capas locales y subida a Supabase en segundo plano para una experiencia de usuario fluida.
+- **Dual Mode**: Navegación híbrida entre pasado (Histórico 10 días) y futuro (Predicción OpenMeteo).
 
 ## 🚀 Características Principales
 
@@ -20,7 +22,8 @@ Meteo Radar AI es una herramienta SaaS de visualización meteorológica diseñad
 - **Selector de Resolución**: Ajuste dinámico de calidad (Alta/Media/Baja) para optimizar rendimiento o detalle.
 - **Cobertura Flexible**: Regiones predefinidas (Euskadi, Madrid, Cataluña, Galicia) y búsqueda por coordenadas lat/lon personalizadas.
 - **Leyenda Interactiva**: Escala visual de precipitaciones integrada en el sidebar.
-- **Sticky Controls**: Interfaz optimizada con controles siempre visibles (Layout 2 columnas).
+- **Sticky Controls**: Interfaz optimizada con controles siempre visibles.
+- **Offline/Local Fallback**: Funciona incluso si la base de datos (Supabase) no está conectada, usando generación de imágenes en base64 local.
 
 ## 🛠️ Instalación y Uso
 
@@ -50,9 +53,16 @@ uv run streamlit run src/ui/app.py
 El sistema sigue una arquitectura **Hexagonal (Ports & Adapters)** para garantizar mantenibilidad:
 
 - **`src/domain`**: Lógica de negocio pura (Interfaces de proveedores, modelos de datos `Xarray`).
-- **`src/adapters`**: Implementaciones externas (Cliente `OpenMeteo`, Caché).
+- **`src/adapters`**: Implementaciones externas (Cliente `OpenMeteo`, Cliente Supabase, AemetAdapter).
 - **`src/application`**: Casos de uso y orquestación (`MeteorologicalFacade`).
 - **`src/ui`**: Interfaz de usuario (`Streamlit`).
+
+### Optimización de Rendimiento
+
+Para evitar latencia en despliegues (como Streamlit Cloud), utilizamos estrategias de **Background Threading**:
+
+1. La capa se genera localmente en RAM y se sirve de inmediato como Base64.
+2. Un hilo secundario convierte el DataArray a GeoTIFF y sube tanto el PNG como el TIF a la nube (Supabase) para persistencia.
 
 ## 📄 Licencia
 
