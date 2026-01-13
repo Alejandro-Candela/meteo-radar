@@ -19,6 +19,7 @@ class ImageOverlayAnimation(MacroElement):
     _template = Template(u"""
         {% macro script(this, kwargs) %}
             var animation_layers_{{this.get_name()}} = {{this.layers_json}};
+            var time_labels_{{this.get_name()}} = {{this.labels_json}};
             var interval_{{this.get_name()}} = null;
             var currentIndex_{{this.get_name()}} = 0;
             var isPlaying_{{this.get_name()}} = true;
@@ -39,7 +40,30 @@ class ImageOverlayAnimation(MacroElement):
                 leaf_layers_{{this.get_name()}}.push(img);
             });
 
-            // 2. Function to Update Frame
+            // 2. Add Custom Control for Time Display / Progress
+            var infoControl = L.control({position: 'bottomleft'});
+
+            infoControl.onAdd = function (map) {
+                var div = L.DomUtil.create('div', 'info legend');
+                div.style.backgroundColor = "rgba(255, 255, 255, 0.8)";
+                div.style.padding = "10px";
+                div.style.borderRadius = "5px";
+                div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
+                div.style.fontFamily = "sans-serif";
+                div.style.fontSize = "14px";
+                div.style.minWidth = "200px";
+                
+                div.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 5px;">Tiempo: <span id="time-label-${this._name}">--:--</span></div>
+                    <div style="width: 100%; height: 5px; background: #ddd; border-radius: 3px;">
+                        <div id="time-progress-${this._name}" style="width: 0%; height: 100%; background: #007bff; border-radius: 3px; transition: width 0.2s;"></div>
+                    </div>
+                `;
+                return div;
+            };
+            infoControl.addTo({{this._parent.get_name()}});
+
+            // 3. Function to Update Frame & UI
             function showFrame_{{this.get_name()}}(index) {
                 leaf_layers_{{this.get_name()}}.forEach(function(layer, i) {
                     if (i === index) {
@@ -48,19 +72,27 @@ class ImageOverlayAnimation(MacroElement):
                         layer.setOpacity(0);
                     }
                 });
+                
+                // Update Control
+                if (time_labels_{{this.get_name()}}.length > index) {
+                     var label = time_labels_{{this.get_name()}}[index];
+                     var pct = ((index + 1) / time_labels_{{this.get_name()}}.length) * 100;
+                     
+                     var lblEl = document.getElementById(`time-label-${this._name}`);
+                     if(lblEl) lblEl.innerText = label;
+                     
+                     var barEl = document.getElementById(`time-progress-${this._name}`);
+                     if(barEl) barEl.style.width = pct + "%";
+                }
             }
 
-            // 3. Animation Loop
+            // 4. Animation Loop
             function startAnimation_{{this.get_name()}}() {
                 if (interval_{{this.get_name()}}) clearInterval(interval_{{this.get_name()}});
                 interval_{{this.get_name()}} = setInterval(function() {
                     currentIndex_{{this.get_name()}} = (currentIndex_{{this.get_name()}} + 1) % leaf_layers_{{this.get_name()}}.length;
                     showFrame_{{this.get_name()}}(currentIndex_{{this.get_name()}});
                 }, frameDuration_{{this.get_name()}});
-            }
-
-            function stopAnimation_{{this.get_name()}}() {
-                if (interval_{{this.get_name()}}) clearInterval(interval_{{this.get_name()}});
             }
 
             // Start immediately
@@ -70,15 +102,18 @@ class ImageOverlayAnimation(MacroElement):
         {% endmacro %}
     """)
 
-    def __init__(self, data, bounds, period=500, zindex=1, opacity=0.6):
+    def __init__(self, data, bounds, time_labels=None, period=500, zindex=1, opacity=0.6):
         super(ImageOverlayAnimation, self).__init__()
         self._name = 'ImageOverlayAnimation'
         
         # Prepare JSON data: [{url: '...', bounds: [[lat1, lon1], [lat2, lon2]]}, ...]
-        # 'data' should be a list of URLs. 'bounds' is constant for all.
         self.layers_json = json.dumps([
             {'url': url, 'bounds': bounds} for url in data
         ])
+        
+        # Prepare labels
+        self.labels_json = json.dumps(time_labels if time_labels else [])
+        
         self.period = period
         self.zindex = zindex
         self.opacity = opacity
@@ -152,6 +187,7 @@ def display_map(
         if animate:
             # Generate ALL frames
             urls = []
+            labels = []
             times = active_ds.time.values
             
             # Limit to reasonable number if needed
@@ -160,6 +196,9 @@ def display_map(
                 dt = pd.to_datetime(t).to_pydatetime()
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
+                
+                # Format label for UI
+                labels.append(dt.strftime("%d/%m %H:%M"))
                 
                 # Use the clean python datetime 'dt' for selection to avoid int64 vs datetime64 mismatch
                 layer_data = active_ds[var_name].sel(time=dt, method="nearest")
@@ -171,7 +210,7 @@ def display_map(
                 urls.append(url)
             
             # Add Animation Element
-            anim = ImageOverlayAnimation(urls, overlay_bounds, period=animation_speed, zindex=zindex, opacity=opacity)
+            anim = ImageOverlayAnimation(urls, overlay_bounds, time_labels=labels, period=animation_speed, zindex=zindex, opacity=opacity)
             m.add_child(anim)
             
         else:
