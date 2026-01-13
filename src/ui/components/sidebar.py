@@ -92,8 +92,8 @@ def render_sidebar():
         st.divider()
         st.subheader("🗺️ Capas")
         config['layers'] = {
-            'precip': st.checkbox("🌧️ Precipitación", value=True),
-            'temp': st.checkbox("🌡️ Temperatura", value=False),
+            'precip': st.checkbox("🌧️ Precipitación", value=False),
+            'temp': st.checkbox("🌡️ Temperatura", value=True),
             'pressure': st.checkbox("⏲️ Presión", value=False),
             'wind': st.checkbox("💨 Viento", value=False),
             'aemet_radar': st.checkbox("📡 Radar AEMET (Oficial)", value=False, disabled=not config.get('aemet_key'))
@@ -102,7 +102,7 @@ def render_sidebar():
         st.divider()
         st.subheader("▶️ Animación")
         # config['auto_play'] = st.checkbox("Reproducción Automática", key="auto_play") # Moved to main area
-        config['play_speed'] = st.slider("Velocidad (seg/frame)", 0.1, 2.0, 0.2)
+        config['play_speed'] = st.slider("Velocidad (seg/frame)", 0.05, 2.0, 0.2)
         
         st.divider()
         if st.button("📁 Exportar Datos..."):

@@ -24,7 +24,7 @@ def display_map(
     # Toggle 'Dark Matter' or 'Positron' based on preference? Stick to Positron for visibility of colors.
     m = leafmap.Map(
         center=[(max_lat+min_lat)/2, (max_lon+min_lon)/2],
-        zoom=6,
+        zoom=5.5,
         draw_control=False,
         measure_control=False,
     )
@@ -67,16 +67,25 @@ def display_map(
         # FIX: The coordinates represent the CENTER of the pixel.
         # ImageOverlay expects the outer EDGES of the image.
         # We must expand the bounds by half-resolution in all directions.
+        # ADJUSTMENT: Manual calibration to shift layers Southeast (Down/Right)
+        # Visually estimated: ~0.1 degrees
+        lat_offset = 0.10 
+        lon_offset = 0.43
+
         half_res_lat = lat_res / 2.0
         half_res_lon = lon_res / 2.0
         
+        # Shift: Min Lat decreases (South), Max Lat decreases (South) -> Subtract Offset
+        #        Min Lon increases (East), Max Lon increases (East) -> Add Offset
+        
         overlay_bounds = [
-            [actual_min_lat - half_res_lat, actual_min_lon - half_res_lon], 
-            [actual_max_lat + half_res_lat, actual_max_lon + half_res_lon]
+            [(actual_min_lat - half_res_lat) - lat_offset, (actual_min_lon - half_res_lon) + lon_offset], 
+            [(actual_max_lat + half_res_lat) - lat_offset, (actual_max_lon + half_res_lon) + lon_offset]
         ]
         
     except Exception as e:
         # Fallback
+        print(f"Error calculating bounds: {e}")
         overlay_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
     # --- Render Layers ---
