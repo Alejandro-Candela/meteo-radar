@@ -1,77 +1,77 @@
 # 📡 Meteo Radar AI (MVP)
 
-> **Visualizador Meteorológico de Alta Precisión con Análisis Histórico y Predictivo.** - [Ver Demo Desplegada](https://meteo-radar.streamlit.app/)
+> **High-Precision Meteorological Visualizer with Historical and Predictive Analysis.** - [View Deployed Demo](https://meteo-radar.streamlit.app/)
 
 ![Status](https://img.shields.io/badge/Status-Beta-blue)
 ![License](https://img.shields.io/badge/License-NonCommercial-red)
 ![Stack](https://img.shields.io/badge/Tech-Streamlit%20|%20Xarray%20|%20OpenMeteo-green)
 
-## 📋 Descripción
+## 📋 Description
 
-Meteo Radar AI es una herramienta SaaS de visualización meteorológica diseñada para ofrecer análisis detallados de precipitaciones y nubosidad. Diferenciándose de los mapas genéricos, este sistema permite interpolación avanzada y persistencia de datos inteligente.
+Meteo Radar AI is a SaaS meteorological visualization tool designed to offer detailed analysis of precipitation and cloud cover. Differentiating itself from generic maps, this system allows for advanced interpolation and smart data persistence.
 
-### 🌟 Novedades (v1.2)
+### 🌟 New Features (v1.2)
 
-- **Flicker-Free Animation**: Motor de animación cliente-side (Leaflet/JS) para transiciones suaves sin recargar la página.
-- **Optimistic UI & Threading**: Generación instantánea de capas locales y subida a Supabase en segundo plano para una experiencia de usuario fluida.
-- **Dual Mode**: Navegación híbrida entre pasado (Histórico 10 días) y futuro (Predicción OpenMeteo).
+- **Flicker-Free Animation**: Client-side animation engine (Leaflet/JS) for smooth transitions without page reloads.
+- **Optimistic UI & Threading**: Instant generation of local layers and background Supabase uploads for a fluid user experience.
+- **Dual Mode**: Hybrid navigation between past (10-day History) and future (OpenMeteo Forecast).
 
-## 🚀 Características Principales
+## 🚀 Key Features
 
-- **Dual Timeline**: Sliders sincronizados para viajar en el tiempo (Pasado/Futuro).
-- **Selector de Resolución**: Ajuste dinámico de calidad (Alta/Media/Baja) para optimizar rendimiento o detalle.
-- **Cobertura Flexible**: Regiones predefinidas (Euskadi, Madrid, Cataluña, Galicia) y búsqueda por coordenadas lat/lon personalizadas.
-- **Leyenda Interactiva**: Escala visual de precipitaciones integrada en el sidebar.
-- **Sticky Controls**: Interfaz optimizada con controles siempre visibles.
-- **Offline/Local Fallback**: Funciona incluso si la base de datos (Supabase) no está conectada, usando generación de imágenes en base64 local.
+- **Dual Timeline**: Synchronized sliders to travel through time (Past/Future).
+- **Resolution Selector**: Dynamic quality adjustment (High/Medium/Low) to optimize performance or detail.
+- **Flexible Coverage**: Predefined regions (Basque Country, Madrid, Catalonia, Galicia) and custom lat/lon coordinate search.
+- **Interactive Legend**: Integrated visual precipitation scale in the sidebar.
+- **Sticky Controls**: Optimized interface with always-visible controls.
+- **Offline/Local Fallback**: Works even if the database (Supabase) is unconnected, using local base64 image generation.
 
-## 🛠️ Instalación y Uso
+## 🛠️ Installation and Usage
 
-Este proyecto utiliza `uv` para la gestión de dependencias y Python 3.12+.
+This project uses `uv` for dependency management and Python 3.12+.
 
-### Prerrequisitos
+### Prerequisites
 
 - Python 3.12+
-- [uv](https://github.com/astral-sh/uv) instalado.
+- [uv](https://github.com/astral-sh/uv) installed.
 
-### Setup Rápido
+### Quick Setup
 
 ```bash
-# 1. Clonar repositorio
+# 1. Clone repository
 git clone <repo-url>
 cd meteo-radar
 
-# 2. Instalar dependencias
+# 2. Install dependencies
 uv sync
 
-# 3. Ejecutar aplicación
+# 3. Run application
 uv run streamlit run src/ui/app.py
 ```
 
-## 🏗️ Arquitectura
+## 🏗️ Architecture
 
-El sistema sigue una arquitectura **Hexagonal (Ports & Adapters)** para garantizar mantenibilidad:
+The system follows a **Hexagonal Architecture (Ports & Adapters)** to ensure maintainability:
 
-- **`src/domain`**: Lógica de negocio pura (Interfaces de proveedores, modelos de datos `Xarray`).
-- **`src/adapters`**: Implementaciones externas (Cliente `OpenMeteo`, Cliente Supabase, AemetAdapter).
-- **`src/application`**: Casos de uso y orquestación (`MeteorologicalFacade`).
-- **`src/ui`**: Interfaz de usuario (`Streamlit`).
+- **`src/domain`**: Pure business logic (Provider interfaces, `Xarray` data models).
+- **`src/adapters`**: External implementations (`OpenMeteo` Client, Supabase Client, AemetAdapter).
+- **`src/application`**: Use cases and orchestration (`MeteorologicalFacade`).
+- **`src/ui`**: User Interface (`Streamlit`).
 
-### Optimización de Rendimiento
+### Performance Optimization
 
-Para evitar latencia en despliegues (como Streamlit Cloud), utilizamos estrategias de **Background Threading**:
+To avoid latency in deployments (like Streamlit Cloud), we use **Background Threading** strategies:
 
-1. La capa se genera localmente en RAM y se sirve de inmediato como Base64.
-2. Un hilo secundario convierte el DataArray a GeoTIFF y sube tanto el PNG como el TIF a la nube (Supabase) para persistencia.
+1. The layer is generated locally in RAM and served immediately as Base64.
+2. A secondary thread converts the DataArray to GeoTIFF and uploads both the PNG and TIF to the cloud (Supabase) for persistence.
 
-## 📄 Licencia
+## 📄 License
 
-Este software se distribuye bajo la **PolyForm Noncommercial License 1.0.0**.
+This software is distributed under the **PolyForm Noncommercial License 1.0.0**.
 
-- ✅ Uso personal y educativo permitido.
-- 🚫 Uso comercial prohibido sin autorización explícita.
+- ✅ Personal and educational use permitted.
+- 🚫 Commercial use prohibited without explicit authorization.
 
-Ver el archivo [LICENSE](LICENSE) para más detalles.
+See the [LICENSE](LICENSE) file for more details.
 
 ---
-**Desarrollado por Alejandro Pérez Candela - 2026**
+**Developed by Alejandro Pérez Candela - 2026**
