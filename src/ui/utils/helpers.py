@@ -1,4 +1,3 @@
-import base64
 import streamlit as st
 import tempfile
 import matplotlib.pyplot as plt
@@ -10,6 +9,9 @@ import xarray as xr
 import rioxarray
 from datetime import datetime
 from src.adapters.supabase_client import SupabaseClient
+import base64
+import threading
+import time
 
 def inject_custom_css():
     st.markdown("""
@@ -82,6 +84,7 @@ def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vm
     Enforces Lat Descending (North -> South) to match origin='upper'.
     Handles 'latitude'/'lat'/'y' and 'longitude'/'lon'/'x'.
     """
+    t_start = time.time()
     # Identify coords
     lat_dim = None
     lon_dim = None
@@ -131,101 +134,132 @@ def generate_colored_png(da: xr.DataArray, filename: str, colormap='viridis', vm
     
     # Save using imsave (origin='upper' matches lat descending)
     plt.imsave(filename, colored_data, origin='upper', format='png')
-
-
-def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime, colormap='viridis', vmin=None, vmax=None) -> str:
-    """
-    Ensures BOTH PNG (for map) and TIFF (for download) exist in Supabase.
-    Uses st.session_state to cache URLs and avoid repeated DB calls.
-    Returns: URL of the PNG for rendering (or base64 string if local).
-    """
-    # 0. Check Session Cache (RAM)
-    if 'layer_cache' not in st.session_state:
-        st.session_state['layer_cache'] = {}
-        
-    cache_key = f"{bbox}_{variable}_{timestamp.isoformat()}_{colormap}"
-    if cache_key in st.session_state['layer_cache']:
-        # print(f"DEBUG: Cache Hit for {cache_key}")
-        return st.session_state['layer_cache'][cache_key]
-
-    # 1. Local Fallback (if no client)
-    if client is None:
-        # Just generate PNG locally for map
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        tmp.close()
-        generate_colored_png(da, tmp.name, colormap, vmin, vmax)
-        
-        try:
-            with open(tmp.name, "rb") as f:
-                b64_data = base64.b64encode(f.read()).decode()
-            os.remove(tmp.name)
-            return f"data:image/png;base64,{b64_data}"
-        except Exception as e:
-            print(f"Error encoding local base64: {e}")
-            return ""
-        
-    # 2. Check Exists (PNG is the critical one for map)
-    # Use "radar_pngs" bucket
-    png_url = client.get_layer_url(bbox, variable, timestamp, ext=".png", bucket="radar_pngs")
-
-    if png_url:
-        st.session_state['layer_cache'][cache_key] = png_url
-        return png_url
-        
-    # 3. Not found, Generate & Upload BOTH
     
-    # A) Generate PNG (Local)
-    tmp_png = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    tmp_png.close()
+    print(f"   [IMG] Pixels generated in {time.time()-t_start:.4f}s")
+
+
+def _background_upload_task(client, da_bytes_or_copy, bbox, variable, timestamp, colormap, vmin, vmax):
+    """
+    Background worker to Handle TIFF generation (CPU Heavy) + Supabase Uploads (IO Heavy).
+    """
+    start_time = time.time()
+    print(f"[BG] Starting persistence for {variable} @ {timestamp}...")
     
-    # B) Generate TIFF (Local)
-    tmp_tif = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-    tmp_tif.close()
+    tmp_png = None
+    tmp_tif = None
     
     try:
-        # Create PNG
+        # 1. Setup Files
+        tmp_png = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp_png.close()
+        tmp_tif = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+        tmp_tif.close()
+        
+        # 2. Convert raw bytes/copy back to logic if needed, or just use da
+        # For safety/simplicity we assume 'da_bytes_or_copy' is a safe separate instance or fast clone
+        da = da_bytes_or_copy 
+        
+        # 3. Generate PNG (Redundant extraction but ensures clean file for upload)
         generate_colored_png(da, tmp_png.name, colormap, vmin, vmax)
         
-        # Create TIFF (using existing logic pattern or rioxarray)
-        # We need to ensure CRS is set for rioxarray
+        # 4. Generate TIFF (Heavy Operation)
+        t_tiff = time.time()
         if not hasattr(da, 'rio'):
             import rioxarray
         
         if da.rio.crs is None:
              da.rio.write_crs("EPSG:4326", inplace=True)
-        
+             
         da.rio.to_raster(tmp_tif.name)
+        print(f"   [BG] TIFF Generated in {time.time()-t_tiff:.3f}s")
         
-        # C) Upload TIFF (to radar_tiffs)
+        # 5. Upload BOTH
+        # Even if PNG exists (local render), we want it on cloud for future cache
+        t_up = time.time()
         client.upload_file(tmp_tif.name, bbox, variable, timestamp, ext=".tif", mime="image/tiff", bucket="radar_tiffs")
+        client.upload_file(tmp_png.name, bbox, variable, timestamp, ext=".png", mime="image/png", bucket="radar_pngs")
+        print(f"   [BG] Uploads completed in {time.time()-t_up:.3f}s")
         
-        # D) Upload PNG (to radar_pngs) - This returns the URL we need
-        final_url = client.upload_file(tmp_png.name, bbox, variable, timestamp, ext=".png", mime="image/png", bucket="radar_pngs")
-        
-        # Cleanup
-        try:
-            os.remove(tmp_png.name)
-            os.remove(tmp_tif.name)
-        except:
-            pass
-            
-        if final_url:
-             st.session_state['layer_cache'][cache_key] = final_url
-             return final_url
-        
-        return ""
+        print(f"[BG] Task COMPLETED for {variable} in {time.time()-start_time:.3f}s")
 
     except Exception as e:
-        print(f"Error dual-uploading: {e}")
-        # Fallback to local base64
+        print(f"[BG] ERROR in background task: {e}")
+    finally:
+        # Cleanup
         try:
-             # Re-generate if lost
-             generate_colored_png(da, tmp_png.name, colormap, vmin, vmax)
-             with open(tmp_png.name, "rb") as f:
-                b64_data = base64.b64encode(f.read()).decode()
-             return f"data:image/png;base64,{b64_data}"
+            if tmp_png: os.remove(tmp_png.name)
+            if tmp_tif: os.remove(tmp_tif.name)
         except:
-             return ""
+            pass
+
+
+def get_or_upload_layer(client, da: xr.DataArray, variable: str, bbox: tuple, timestamp: datetime, colormap='viridis', vmin=None, vmax=None) -> str:
+    """
+    OPTIMIZED for Speed Parity:
+    1. IMMEDAITELY generates PNG locally and returns Base64 (Blocking only for rendering).
+    2. Spawns Background Thread to handle TIFF conversion + Cloud Uploads.
+    """
+    t_start = time.time()
+    print(f"[LAYER] Request: {variable} | {timestamp.strftime('%H:%M')}")
+
+    # 0. Check Session Cache (RAM)
+    if 'layer_cache' not in st.session_state:
+        st.session_state['layer_cache'] = {}
+        
+    cache_key = f"{bbox}_{variable}_{timestamp.isoformat()}_{colormap}"
+    
+    # If valid cache, return immediately
+    if cache_key in st.session_state['layer_cache']:
+        # print(f"   [CACHE] Hit! ({time.time()-t_start:.4f}s)")
+        return st.session_state['layer_cache'][cache_key]
+
+    # 1. Fast Path: Generate Local PNG for Map
+    tmp_png = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp_png.close()
+    
+    base64_url = ""
+    
+    try:
+        # Generate Pixels
+        generate_colored_png(da, tmp_png.name, colormap, vmin, vmax)
+        
+        # Read as Base64
+        with open(tmp_png.name, "rb") as f:
+            b64_data = base64.b64encode(f.read()).decode()
+        base64_url = f"data:image/png;base64,{b64_data}"
+        
+        # Cache RAM
+        st.session_state['layer_cache'][cache_key] = base64_url
+        print(f"   [UI] Ready to render in {time.time()-t_start:.4f}s")
+        
+    except Exception as e:
+        print(f"   [ERROR] Generating local preview: {e}")
+        return ""
+    finally:
+        try:
+             os.remove(tmp_png.name)
+        except:
+             pass
+
+    # 2. Persistence Path: Background Thread (If Client is Available)
+    if client:
+        # Clone DataArray to ensure thread safety (shallow copy is usually enough for reading, deep if needed)
+        # Using .copy(deep=True) is safer but slower. 
+        # Since we are just reading, shallow copy + in-memory data is fine.
+        da_safe = da.copy() 
+        
+        t = threading.Thread(
+            target=_background_upload_task,
+            args=(client, da_safe, bbox, variable, timestamp, colormap, vmin, vmax),
+            name=f"Upload-{variable}-{timestamp.strftime('%H%M')}"
+        )
+        t.daemon = True
+        t.start()
+        print(f"   [THREAD] Background Persistence Started.")
+    else:
+        print("   [WARN] No Supabase Client - Skipping Persistence.")
+
+    return base64_url
 
 def get_radar_legend_html():
     return """
